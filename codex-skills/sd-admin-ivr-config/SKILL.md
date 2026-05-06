@@ -1,6 +1,6 @@
 ---
 name: sd-admin-ivr-config
-description: Use when configuring, creating, updating, validating, or troubleshooting IVR/script-configuration workflows in the Shandian Intelligent admin backend at ai.sd6g.com:1904, especially tasks involving 话术配置, 智能Agent/智能节点, /api/web IVR APIs, sceneList/sceneListFrontend, prompt Markdown import, or direct Bearer token API calls without logging in.
+description: Use when configuring, creating, updating, validating, or troubleshooting IVR/script-configuration workflows in the Shandian Intelligent admin backend at ai.sd6g.com:1904, especially tasks involving 话术配置, 智能Agent/智能节点, /api/web IVR APIs, sceneList/sceneListFrontend, prompt Markdown import, intent usage rules, terminal/hangup intents, or direct Bearer token API calls without logging in.
 ---
 
 # Shandian Admin IVR Config
@@ -15,6 +15,8 @@ Use this skill to operate the Shandian Intelligent admin backend by API, not by 
 - Verify token first with `GET /account/findInfo`; continue only when `code=0`.
 - For write operations, create or use a test/new IVR unless the user explicitly asks to modify an existing production IVR.
 - For `updateSceneList`, snapshot existing config first and verify by reading it back.
+- On Windows, do not use Windows PowerShell 5 for Chinese JSON write requests or inline Chinese payloads; use a UTF-8 Python script or UTF-8 files. PowerShell 5 may mojibake Chinese names/prompts.
+- When configuring, checking, or importing a prompt that contains `intent`, read `references/intent-usage-rules.md` first and enforce it against the prompt plus IVR ports/mappings.
 
 ## Quick Workflow
 
@@ -31,9 +33,10 @@ Use this skill to operate the Shandian Intelligent admin backend by API, not by 
    - `POST /ivr/findPage` with `{"query":{"searchName":""},"page":{"current":1,"size":10}}`
 4. Create IVR with `/ivr/insert`, or read the target IVR if updating.
 5. For smart Agent nodes, clone a known-good scene graph shape from an existing IVR, then replace only business fields.
-6. Import prompt Markdown as UTF-8. If the full prompt causes `话术场景信息异常`, compact whitespace and retry under the backend's practical prompt length.
-7. Verify with `/ivr/findSceneList/{ivrId}` and, when useful, open `/script-graph?ivrId=<ivrId>`.
-8. Delete temporary token files or auth dumps.
+6. If the prompt contains `intent`, read `references/intent-usage-rules.md`; verify non-hangup intents use current node IDs, hangup intents are exactly the four allowed terminal labels, and labels match IVR ports.
+7. Import prompt Markdown as UTF-8. If the prompt is under 10,000 characters, write it unchanged; only compact when it is 10,000+ characters or a readback-verified write fails with `话术场景信息异常`.
+8. Verify with `/ivr/findSceneList/{ivrId}` and, when useful, open `/script-graph?ivrId=<ivrId>`.
+9. Delete temporary token files or auth dumps.
 
 ## Key API Rules
 
@@ -52,6 +55,7 @@ Use this skill to operate the Shandian Intelligent admin backend by API, not by 
 
 - Smart Agent node type is `type: 4`.
 - Agent model config lives at `llmNodeModelConfig`.
+- For Chinese scene names, node names, prompts, and graph JSON on Windows, prefer Python `requests` with `json=...`, `ensure_ascii=False`, and explicit UTF-8 file reads/writes. Avoid PowerShell 5 inline Chinese strings for write calls.
 - Keep backend and frontend copies in sync:
   - `sceneList[0].nodeList[0]`
   - `sceneListFrontend[0].nodeList[0]`
@@ -60,3 +64,5 @@ Use this skill to operate the Shandian Intelligent admin backend by API, not by 
 ## References
 
 Read `references/workflow.md` when you need the detailed end-to-end procedure, payload templates, prompt-length workaround, validation checklist, or troubleshooting notes.
+
+Read `references/intent-usage-rules.md` before configuring, checking, importing, or debugging any prompt that outputs `{"intent":"..."}` or uses terminal/hangup intent labels.
