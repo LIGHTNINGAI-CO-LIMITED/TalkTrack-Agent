@@ -38,6 +38,11 @@ Use this skill to operate the Shandian Intelligent admin backend by API, not by 
 8. Verify with `/ivr/findSceneList/{ivrId}` and, when useful, open `/script-graph?ivrId=<ivrId>`.
 9. Delete temporary token files or auth dumps.
 
+## Bundled Scripts
+
+- Use `scripts/create_doushen_real_prompt_ivr.py` for "create a new IVR from a stable template + import a UTF-8 prompt" tasks when its parameters fit. It validates the token, clones the template graph, writes raw prompts under 10,000 characters unchanged, falls back to compacted prompt only after length/failure, and reports `promptStrategy`, `promptWrittenChars`, hashes, readback matches, port labels, and terminal nodes.
+- Run bundled scripts with a token argument only for the current task; do not hardcode real tokens into scripts, docs, commits, or examples.
+
 ## Key API Rules
 
 - Base URL: `https://ai.sd6g.com:1904/api/web`

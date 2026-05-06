@@ -63,6 +63,18 @@ r.encoding = "utf-8"
 data = r.json()
 ```
 
+## Bundled Creation Script
+
+For "create a new IVR from a stable template + import prompt Markdown" tasks, prefer the skill script when it fits instead of rewriting request code:
+
+```powershell
+python scripts/create_doushen_real_prompt_ivr.py --token <TOKEN> --prompt-path <UTF8_MD> --template-ivr-id 3449
+```
+
+The script uses Python `requests` and UTF-8 file reads/writes to avoid Windows PowerShell 5 Chinese encoding problems. It applies the raw-prompt policy automatically: prompts under 10,000 characters are written unchanged; compacted prompt is used only when the raw prompt is 10,000+ characters or a raw write fails and a compact fallback is required.
+
+Read its JSON output before reporting success. Key fields are `promptStrategy`, `promptWrittenChars`, `promptCompactedChars`, `promptSha256`, `backendPromptMatches`, `frontendPromptMatches`, `graphPromptMatches`, `portLabels`, and `terminalNodes`.
+
 ## Base Reads
 
 Call these before writing:
