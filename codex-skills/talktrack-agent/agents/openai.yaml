@@ -1,0 +1,4 @@
+interface:
+  display_name: "TalkTrack-Agent"
+  short_description: "把任意文档生成外呼提示词，并配置、校验或只读体检智能 Agent。"
+  default_prompt: "用 TalkTrack-Agent 帮我处理闪电智能管理后台的话术智能 Agent：先判断任务模式，再按需把源文档生成外呼提示词草稿、创建、更新、校验或只读体检评分。"
