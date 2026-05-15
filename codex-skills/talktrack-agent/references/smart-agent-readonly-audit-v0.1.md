@@ -132,6 +132,24 @@ Typical deductions:
 - P1-sized: prompt intent labels and graph ports disagree, or smart-Agent terminal examples duplicate downstream terminal-node closing copy.
 - P2-sized: label naming is confusing but mapped correctly.
 
+### 4.5 Smart Information Collection Governance
+
+If the smart Agent uses 智能信息采集, also check:
+
+- Standard mode uses `{collectParam}` exactly once.
+- Dialogue fields have concise field descriptions.
+- Field descriptions require evidence from user wording or conversation context.
+- Custom inline `param` JSON, if used, has field names matching configured dialogue fields.
+- Information collection does not break the required intent JSON format.
+- Terminal-closing ownership still holds when terminal replies include collected params.
+- PII / sensitive fields are minimized and explicitly justified.
+
+Typical deductions:
+
+- P0-sized: prompt output format is broken and may prevent routing or collection.
+- P1-sized: `{collectParam}` missing/duplicated, inline field names mismatch configured fields, or collection asks for unsupported/sensitive data without approval.
+- P2-sized: field descriptions are vague but likely recoverable with human review.
+
 ### 5. Archive And Security Hygiene: 20
 
 Check this audit run itself:
@@ -186,6 +204,12 @@ Suggested schema:
   "recommendIntentRuleFix": false,
   "recommendBackendFix": false,
   "recommendLiveDebug": false,
+  "smartInformationCollectionCheck": {
+    "checked": false,
+    "mode": "none",
+    "fieldCount": 0,
+    "items": []
+  },
   "terminalClosingOverlapCheck": {
     "checked": false,
     "overlapCount": 0,
@@ -208,8 +232,9 @@ When the user requests a durable report, include:
 6. `llmNodeModelConfig` summary.
 7. Prompt readback integrity summary.
 8. Intent / port governance summary.
-9. Terminal-closing overlap summary, including whether the smart Agent or downstream terminal node owns the final spoken closing.
-10. P0 / P1 / P2 issue list.
-11. Next-step recommendation flags.
-12. Scorer limitations and follow-up improvements.
-13. Token leak check result if a token was used.
+9. Smart information collection summary, if present.
+10. Terminal-closing overlap summary, including whether the smart Agent or downstream terminal node owns the final spoken closing.
+11. P0 / P1 / P2 issue list.
+12. Next-step recommendation flags.
+13. Scorer limitations and follow-up improvements.
+14. Token leak check result if a token was used.

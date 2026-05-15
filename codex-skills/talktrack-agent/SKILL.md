@@ -1,6 +1,6 @@
 ---
 name: talktrack-agent
-description: Use when configuring, creating, updating, validating, troubleshooting, read-only scoring, or drafting outbound smart-Agent prompts for Shandian Intelligent admin IVR workflows at ai.sd6g.com:1904, especially tasks involving arbitrary source-document to outbound prompt generation, 话术配置, 智能Agent/智能节点, /api/web IVR APIs, sceneList/sceneListFrontend, prompt Markdown import, llmNodeModelConfig, intent/port mapping, terminal/hangup intents, smart-Agent audit scoring, or direct Bearer token API calls without logging in. For ordinary-node TalkTrack-Master work, use the talktrack-master skill instead.
+description: Use when configuring, creating, updating, validating, troubleshooting, read-only scoring, or drafting outbound smart-Agent prompts for Shandian Intelligent admin IVR workflows at ai.sd6g.com:1904, especially tasks involving arbitrary source-document to outbound prompt generation, 话术配置, 智能Agent/智能节点, 智能信息采集, 对话字段, collectParam, /api/web IVR APIs, sceneList/sceneListFrontend, prompt Markdown import, llmNodeModelConfig, intent/port mapping, terminal/hangup intents, smart-Agent audit scoring, or direct Bearer token API calls without logging in. For ordinary-node TalkTrack-Master work, use the talktrack-master skill instead.
 ---
 
 # TalkTrack-Agent
@@ -9,7 +9,7 @@ Use this TalkTrack-series skill to operate the Shandian Intelligent smart-Agent 
 
 ## Boundary
 
-- Use this skill for smart Agent / smart-node work: arbitrary source-document to outbound prompt drafting, IVR creation, prompt import, `llmNodeModelConfig`, intent rules, graph port mappings, terminal / hangup intents, and read-only smart-Agent audits.
+- Use this skill for smart Agent / smart-node work: arbitrary source-document to outbound prompt drafting, IVR creation, prompt import, `llmNodeModelConfig`, smart information collection / dialogue fields / `{collectParam}`, intent rules, graph port mappings, terminal / hangup intents, and read-only smart-Agent audits.
 - Use `talktrack-master` for TalkTrack-Master ordinary-node work: normal / jump / end nodes, system TTS, knowledge-base answer TTS, NLP / knowledge-base matching, and ordinary-node large-model intent analysis 2.0.
 - When one request mixes both layers, split the work by ownership and state which skill owns each layer before reading or writing backend data.
 
@@ -27,10 +27,11 @@ Use this TalkTrack-series skill to operate the Shandian Intelligent smart-Agent 
 - On Windows, do not use Windows PowerShell 5 for Chinese JSON write requests or inline Chinese payloads; use a UTF-8 Python script or UTF-8 files. PowerShell 5 may mojibake Chinese names/prompts.
 - When configuring, checking, or importing a prompt that contains `intent`, read `references/intent-usage-rules.md` first and enforce it against the prompt plus IVR ports/mappings.
 - Enforce terminal-closing ownership. If a smart Agent terminal `intent` maps to a later hangup / end node, the Agent must only say a short acknowledgement plus `{"intent":"..."}`; the formal closing sentence, goodbye, handoff promise, and repeated business details belong to the downstream terminal node. Only let the Agent speak the full closing when there is no downstream terminal node that will speak it.
+- For smart information collection, prefer the standard configuration: enable 智能信息采集, define dialogue fields with precise field descriptions, and insert `{collectParam}` once in the prompt. Use custom inline `param` JSON only when the user explicitly needs full prompt-level control or when the backend workflow requires it.
 
 ## Quick Workflow
 
-0. Classify the task mode before touching APIs: document-to-prompt drafting, smart Agent creation, prompt import, read-only audit, intent / port check, terminal / hangup check, `llmNodeModelConfig` check, or prompt readback validation.
+0. Classify the task mode before touching APIs: document-to-prompt drafting, smart Agent creation, prompt import, smart information collection design/check, read-only audit, intent / port check, terminal / hangup check, `llmNodeModelConfig` check, or prompt readback validation.
 1. Extract token from the user's curl or message.
    - Prefer `-H 'token: Bearer ...'`.
    - If only cookie is present, URL decode `token=Bearer%20...`.
@@ -56,6 +57,8 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 - `smart-agent-create`: create or assemble an IVR smart Agent from approved source material. Requires explicit write authorization.
 - `doc-to-outbound-prompt`: convert arbitrary source documents into an outbound smart-Agent prompt draft. Draft-only; no backend writes.
 - `prompt-package-review`: review a generated prompt package for factual grounding, intent rules, privacy risk, length, and import readiness.
+- `smart-info-collection-design`: design 智能信息采集 dialogue fields, field descriptions, `{collectParam}` placement, and evidence rules for a smart Agent prompt package.
+- `smart-info-collection-check`: verify an existing smart Agent prompt/config uses information collection safely, without breaking intent JSON or terminal-closing ownership.
 - `prompt-import`: import a Markdown prompt into an existing smart node and validate prompt readback. Requires explicit write authorization.
 - `readonly-audit`: inspect existing IVR / smart-node configuration without backend writes.
 - `smart-agent-score`: run the smart-Agent read-only audit scorer and produce P0 / P1 / P2 findings plus next-step recommendations.
@@ -102,3 +105,5 @@ Read `references/intent-usage-rules.md` before configuring, checking, importing,
 Read `references/smart-agent-readonly-audit-v0.1.md` before running a smart-Agent read-only audit scorer or writing its report.
 
 Read `references/document-to-outbound-prompt-v0.1.md` before converting arbitrary source documents into outbound smart-Agent prompt drafts.
+
+Read `references/smart-information-collection-v0.1.md` before designing, checking, or importing 智能信息采集 / dialogue-field collection for a smart Agent node.

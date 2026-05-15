@@ -85,6 +85,8 @@ Start every run by naming the primary task mode. This prevents smart-Agent creat
 | `prompt-package-review` | Review a generated prompt package for grounding, privacy, intent rules, length, and import readiness | No |
 | `smart-agent-create` | New smart Agent IVR creation from approved source material or a known-good template | Yes, only after explicit user authorization |
 | `prompt-import` | Importing or replacing a smart-node Markdown prompt | Yes, only after explicit user authorization |
+| `smart-info-collection-design` | Designing 智能信息采集 fields, field descriptions, and `{collectParam}` placement | No by default |
+| `smart-info-collection-check` | Checking existing smart information collection prompt/config safety | Read-only by default |
 | `readonly-audit` | Readback-only inspection of an existing IVR or smart node | No |
 | `smart-agent-score` | Producing a 100-point smart-Agent health score with P0/P1/P2 findings | No |
 | `intent-port-check` | Checking prompt intent labels, graph ports, mappings, and terminal nodes | Read-only by default |
@@ -96,6 +98,8 @@ Start every run by naming the primary task mode. This prevents smart-Agent creat
 If the user asks to move from read-only mode to a write mode, pause and restate the exact IVR ID, node scope, intended fields, backup path, and write endpoint before calling any write API.
 
 For source-document conversion, use `references/document-to-outbound-prompt-v0.1.md`. The output is a prompt package, not a backend write. Treat any later import as a separate `prompt-import` task.
+
+For smart information collection, read `references/smart-information-collection-v0.1.md`. Prefer the standard mode: enable 智能信息采集, configure dialogue fields, and insert `{collectParam}` once in the prompt. Do not switch to inline `param` JSON unless the user explicitly needs full prompt control or the backend workflow requires it.
 
 ## Base Reads
 
@@ -271,6 +275,8 @@ Check:
 - The prompt's four hangup labels match IVR smart-node ports and map to `type=2`, `nextType=2`, `actionName=挂机` terminal nodes.
 - Non-hangup intent examples in the prompt are node IDs rather than terminal labels.
 - Terminal intent examples do not duplicate downstream terminal-node closing text. If downstream nodes speak the closing, smart-Agent terminal examples are short acknowledgements only.
+- If 智能信息采集 is enabled, `{collectParam}` appears exactly once in standard mode, or inline `param` JSON uses exact configured field names in custom mode.
+- Dialogue-field descriptions are evidence-based and privacy-minimized.
 
 Optional browser check:
 
@@ -287,6 +293,7 @@ Core properties:
 - Read-only only. Do not call endpoints containing `update`, `insert`, `delete`, `save`, or `create`.
 - Store raw JSON under `D:\闪电智能\tmp`; do not copy full raw JSON into Obsidian.
 - Score the current IVR against smart-Agent dimensions: node structure, `llmNodeModelConfig`, prompt readback integrity, intent / port governance, and archive / security hygiene.
+- Include smart information collection in prompt/config governance when present: enabled state, dialogue fields, field descriptions, `{collectParam}` or inline `param` usage, and privacy risk.
 - Report P0 / P1 / P2 findings, plus whether the next step should be prompt import, intent-rule repair, backend fix, or live debug.
 - If a token is used, scan generated report files and raw JSON paths for an exact token leak before final delivery.
 - Include terminal-closing overlap findings: whether terminal intent examples in the prompt repeat downstream terminal-node copy, and whether the recommended fix is prompt-only or graph/terminal-node repair.

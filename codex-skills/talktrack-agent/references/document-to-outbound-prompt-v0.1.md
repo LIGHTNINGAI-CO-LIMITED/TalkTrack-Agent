@@ -44,12 +44,14 @@ Keep source evidence structured:
    - objection handling
    - qualification or next-step collection
    - closing / hangup handling
-4. Identify whether terminal closing is owned by the smart Agent itself or by downstream hangup / end nodes.
-5. Identify intent labels if the target prompt should emit `{"intent":"..."}`.
-6. If intent output is required, load `intent-usage-rules.md` and keep hangup / terminal labels plus terminal-closing ownership compliant.
-7. Draft the outbound smart-Agent prompt.
-8. Review for grounding, privacy, intent rules, terminal-closing overlap, length, and import readiness.
-9. Output a prompt package. Do not import it automatically.
+4. Identify whether structured business fields should be collected through 智能信息采集.
+5. Identify whether terminal closing is owned by the smart Agent itself or by downstream hangup / end nodes.
+6. Identify intent labels if the target prompt should emit `{"intent":"..."}`.
+7. If intent output is required, load `intent-usage-rules.md` and keep hangup / terminal labels plus terminal-closing ownership compliant.
+8. If information collection is required, load `smart-information-collection-v0.1.md` and design dialogue fields plus `{collectParam}` placement.
+9. Draft the outbound smart-Agent prompt.
+10. Review for grounding, privacy, intent rules, information-collection safety, terminal-closing overlap, length, and import readiness.
+11. Output a prompt package. Do not import it automatically.
 
 ## Prompt Package Output
 
@@ -74,10 +76,20 @@ Generate Markdown with these sections:
 | Intent | Meaning | Suggested Target | Notes |
 | --- | --- | --- | --- |
 
+## Smart Information Collection Plan
+| Field | Description | Value convention | Evidence source | Required? |
+| --- | --- | --- | --- | --- |
+
+Recommended mode:
+Prompt insertion point:
+Privacy risk:
+Human confirmation needed:
+
 ## Import Readiness Check
 - Factual grounding:
 - Privacy risk:
 - Intent-rule compliance:
+- Information-collection readiness:
 - Estimated length:
 - Backend import readiness:
 
@@ -101,6 +113,7 @@ The generated prompt should include:
 - Knowledge boundaries: what to say when the answer is unknown.
 - Intent output rules when needed.
 - Hangup / terminal handling when needed.
+- Smart information collection plan when structured dialogue fields are required.
 
 ## Terminal Closing Ownership
 
@@ -157,6 +170,8 @@ Before calling the prompt package ready:
 - Is the call goal explicit?
 - Does the prompt tell the Agent what to do when the user interrupts, refuses, asks for details, or wants a human?
 - If intent JSON is required, does it follow `intent-usage-rules.md`?
+- If information collection is required, does it use standard `{collectParam}` once unless custom inline `param` JSON is explicitly needed?
+- Are dialogue fields precise, evidence-based, and privacy-minimized?
 - If terminal intents map to downstream hangup / end nodes, are terminal examples short acknowledgements instead of full closing copy?
 - Did the review remove duplicate terminal wording such as goodbye, handoff promises, delivery-of-material promises, salary/interview details, and downstream closing sentences?
 - Is the generated prompt likely under the backend practical length limit?
