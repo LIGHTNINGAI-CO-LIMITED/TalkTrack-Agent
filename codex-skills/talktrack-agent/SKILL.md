@@ -27,7 +27,9 @@ Use this TalkTrack-series skill to operate the Shandian Intelligent smart-Agent 
 - On Windows, do not use Windows PowerShell 5 for Chinese JSON write requests or inline Chinese payloads; use a UTF-8 Python script or UTF-8 files. PowerShell 5 may mojibake Chinese names/prompts.
 - When configuring, checking, or importing a prompt that contains `intent`, read `references/intent-usage-rules.md` first and enforce it against the prompt plus IVR ports/mappings.
 - Enforce terminal-closing ownership. If a smart Agent terminal `intent` maps to a later hangup / end node, the Agent must only say a short acknowledgement plus `{"intent":"..."}`; the formal closing sentence, goodbye, handoff promise, and repeated business details belong to the downstream terminal node. Only let the Agent speak the full closing when there is no downstream terminal node that will speak it.
-- For smart information collection, prefer the standard configuration: enable 智能信息采集, define dialogue fields with precise field descriptions, and insert `{collectParam}` once in the prompt. Use custom inline `param` JSON only when the user explicitly needs full prompt-level control or when the backend workflow requires it.
+- For smart information collection, prefer the standard configuration: enable the front-page `智能信息采集` switch by setting `llmNodeCollectParamEnabled=1`, define dialogue fields in `llmNodeCollectParamList` with precise descriptions, and insert `{collectParam}` once in the prompt. Use custom inline `param` JSON only when the user explicitly needs full prompt-level control or when the backend workflow requires it. Do not confuse this with the lower `信息采集` switch (`infoCollectEnabled` / `infoCollectConfigList`), which is a separate page section.
+- Dialogue fields are scenario-derived, not fixed defaults. Do not blindly create `客户姓名` / `客户手机号` / `公司名称` for every smart Agent. Infer fields from the user's prompt, source document, business goal, and follow-up workflow; only include PII fields when they are clearly required and authorized.
+- When creating, importing, or optimizing a smart Agent from a prompt, source document, or business scenario, treat smart information collection as a proactive configuration surface: infer useful dialogue fields, write a `Smart Information Collection Plan`, and, when backend modification is explicitly authorized, enable 智能信息采集 plus the approved fields instead of waiting for a separate request. For read-only validation tasks, report missing fields and do not auto-fix them.
 
 ## Quick Workflow
 
@@ -46,9 +48,10 @@ Use this TalkTrack-series skill to operate the Shandian Intelligent smart-Agent 
 4. Create IVR with `/ivr/insert`, or read the target IVR if updating.
 5. For smart Agent nodes, clone a known-good scene graph shape from an existing IVR, then replace only business fields.
 6. If the prompt contains `intent`, read `references/intent-usage-rules.md`; verify non-hangup intents use current node IDs, hangup intents are exactly the four allowed terminal labels, and labels match IVR ports.
-7. Import prompt Markdown as UTF-8. If the prompt is under 10,000 characters, write it unchanged; only compact when it is 10,000+ characters or a readback-verified write fails with `话术场景信息异常`.
-8. Verify with `/ivr/findSceneList/{ivrId}` and, when useful, open `/script-graph?ivrId=<ivrId>`.
-9. Delete temporary token files or auth dumps.
+7. If the task involves lead qualification, customer identity, appointment, company, budget, service choice, or other structured follow-up data, read `references/smart-information-collection-v0.1.md`, infer collection fields from the scene, and add `{collectParam}` exactly once to the prompt package. The field list must be generated from the current scene, not copied from a fixed template. If backend writes are authorized, enable the front-page 智能信息采集 switch (`llmNodeCollectParamEnabled=1`) and configure the approved `llmNodeCollectParamList` fields during import/update.
+8. Import prompt Markdown as UTF-8. If the prompt is under 10,000 characters, write it unchanged; only compact when it is 10,000+ characters or a readback-verified write fails with `话术场景信息异常`.
+9. Verify with `/ivr/findSceneList/{ivrId}` and, when useful, open `/script-graph?ivrId=<ivrId>`.
+10. Delete temporary token files or auth dumps.
 
 ## Task Modes
 
@@ -57,7 +60,8 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 - `smart-agent-create`: create or assemble an IVR smart Agent from approved source material. Requires explicit write authorization.
 - `doc-to-outbound-prompt`: convert arbitrary source documents into an outbound smart-Agent prompt draft. Draft-only; no backend writes.
 - `prompt-package-review`: review a generated prompt package for factual grounding, intent rules, privacy risk, length, and import readiness.
-- `smart-info-collection-design`: design 智能信息采集 dialogue fields, field descriptions, `{collectParam}` placement, and evidence rules for a smart Agent prompt package.
+- `smart-info-collection-design`: design 智能信息采集 dialogue fields, field descriptions, `{collectParam}` placement, and evidence rules for a smart Agent prompt package. Use this proactively when the scenario implies structured follow-up data, even if the user did not use the exact phrase "智能信息采集".
+- `smart-info-collection-configure`: enable 智能信息采集 (`llmNodeCollectParamEnabled=1`), create/select approved scenario-derived dialogue fields in `llmNodeCollectParamList`, update the prompt with `{collectParam}`, and verify backend readback. Requires explicit backend modification authorization and a clear target IVR / smart node. Acceptance requires `llmNodeCollectParamEnabled=1` in backend node, `sceneListFrontend.nodeList`, and graph `customData`; `infoCollectEnabled=1` alone is not enough because the visible radio group will still show `不采集`.
 - `smart-info-collection-check`: verify an existing smart Agent prompt/config uses information collection safely, without breaking intent JSON or terminal-closing ownership.
 - `prompt-import`: import a Markdown prompt into an existing smart node and validate prompt readback. Requires explicit write authorization.
 - `readonly-audit`: inspect existing IVR / smart-node configuration without backend writes.
@@ -90,6 +94,9 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 
 - Smart Agent node type is `type: 4`.
 - Agent model config lives at `llmNodeModelConfig`.
+- Front visible `智能信息采集` state lives at `llmNodeCollectParamEnabled` and field list at `llmNodeCollectParamList`. To make the page show `采集`, set and read back `llmNodeCollectParamEnabled=1` in backend, frontend node list, and graph custom data.
+- Lower `信息采集` model extraction lives at `infoCollectEnabled` and `infoCollectConfigList`. It can coexist with the front switch, but it does not prove the front visible `智能信息采集` radio is enabled.
+- When the scenario includes phone-number collection, configure prompt and field descriptions for session-level accumulation of segmented digits; if the lower extractor is used for phone capture, set a recognition round that covers the expected reporting pattern, up to `11` for one-digit-at-a-time reporting.
 - For Chinese scene names, node names, prompts, and graph JSON on Windows, prefer Python `requests` with `json=...`, `ensure_ascii=False`, and explicit UTF-8 file reads/writes. Avoid PowerShell 5 inline Chinese strings for write calls.
 - Keep backend and frontend copies in sync:
   - `sceneList[0].nodeList[0]`
