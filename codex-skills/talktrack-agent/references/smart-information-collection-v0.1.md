@@ -113,6 +113,8 @@ Design the field list from the current scenario. Start from the business decisio
 
 Do not copy a fixed list from another IVR. Add names, phone numbers, company names, or other PII only when the current prompt and business flow genuinely need them.
 
+For contact follow-up scenarios, do not collapse all contact methods into `客户手机号`. Phone numbers, WeChat IDs, current calling number, and "unwilling to provide" are different outcomes and need explicit fields or status values when the business flow depends on them.
+
 Good fields are:
 
 - action-oriented: `是否同意加微信`, `预约时间`, `处理方案`, `退款方式`
@@ -145,6 +147,15 @@ Use these only when the scenario needs customer identity or follow-up qualificat
 
 字段名：客户手机号
 字段描述：仅当用户明确说出完整手机号或可合并的分段手机号时形成 11 位候选手机号；进入手机号采集中状态后，支持客户分2次、分8次、甚至一位一位慢速报号，并在本次手机号采集会话内持续累积数字片段、中文数字、幺/一/零等号码表达；形成 11 位候选号码后必须先复述核对，客户确认后才填写为已确认手机号；未完整表达或未确认时留空、写“未完整”或“待确认”；不得编造缺失数字，不得把时间、金额、业务量拼入手机号。
+
+字段名：客户微信号
+字段描述：仅当用户明确提供微信号且该微信号不是 11 位手机号时填写；支持字母、数字、下划线、短横线等分段表达；必须逐段复述并获得客户确认后才填写为已确认微信号；不得写入手机号字段，不得根据手机号或公司名推测微信号。
+
+字段名：联系方式类型
+字段描述：根据用户明确提供或确认的联系方式填写 `手机号`、`微信号`、`本机号码`、`不愿提供`、`待跟进` 或 `未提及`；不得把非手机号微信号归类为手机号。
+
+字段名：联系方式确认状态
+字段描述：记录联系方式是否已确认，可填 `待确认`、`已确认`、`客户否认`、`客户纠正中`、`客户拒绝提供`；未经过复述确认的手机号或微信号不得标记为已确认。
 
 字段名：公司名称
 字段描述：仅当用户明确说出公司、单位、机构或店铺名称时填写原话中的名称；未表达时留空或写“未提及”；不得把职位、行业或项目名误当作公司名称。
@@ -181,6 +192,33 @@ Recommended prompt rule:
 
 ```text
 手机号确认门：当你在手机号采集中累积出 11 位候选号码后，必须先完整复述给用户核对，例如“我跟您核对一下，是 18210235565，对吗？”只有用户明确确认后，才视为已确认手机号并继续后续收口或意图跳转；如果用户否认、纠正或要求重来，按用户纠正内容更新或清空候选号码，并再次复述核对。未确认前不得说“已经记下”，不得输出终态 intent。
+```
+
+### Contact Method And WeChat ID Collection
+
+Do not assume the user's contact method is always a phone number.
+
+Recommended fields when the scenario needs contact follow-up:
+
+- `联系方式类型`: `手机号` / `微信号` / `本机号码` / `不愿提供` / `待跟进` / `未提及`
+- `客户手机号`: only confirmed 11-digit mobile numbers
+- `客户微信号`: confirmed non-phone WeChat IDs
+- `联系方式确认状态`: `待确认` / `已确认` / `客户否认` / `客户纠正中` / `客户拒绝提供`
+
+Rules:
+
+1. If the user says their WeChat is their phone number, run the phone-number confirmation gate and store the confirmed value in `客户手机号`; set `联系方式类型=手机号`.
+2. If the user says "微信不是手机号" or provides a non-phone WeChat ID, switch to WeChat-ID collection. Do not validate it as an 11-digit phone number and do not write it into `客户手机号`.
+3. A WeChat ID may include letters, digits, underscore, hyphen, or mixed spoken tokens such as "下划线", "横杠", "大写 A", "小写 b". Capture it as a character / segment sequence, not as natural-language intent.
+4. Read the WeChat ID back segment-by-segment before treating it as confirmed, for example: `我跟您核对一下，微信号是 a b c 下划线 2026，对吗？`
+5. If the user corrects a segment, update that segment and read back the full WeChat ID again.
+6. Before confirmation, do not say `已经记下`, do not promise follow-up through that WeChat ID, and do not output a terminal `intent` solely because a candidate WeChat ID was heard.
+7. If the user refuses or says "稍后加你", record the status as `待跟进` or `客户拒绝提供`; do not invent a WeChat ID.
+
+Recommended prompt rule:
+
+```text
+联系方式采集：不要默认把联系方式等同于手机号。若用户提供 11 位手机号或说微信就是手机号，走手机号确认门；若用户说“微信不是手机号”或提供非手机号微信号，切换到微信号采集，把它记录到“客户微信号”而不是“客户手机号”。微信号可能包含字母、数字、下划线、短横线等，必须按字符或分段复述给用户确认，例如“我跟您核对一下，微信号是 a b c 下划线 2026，对吗？”客户明确确认后，才标记为已确认联系方式；客户纠正时更新后再次完整核对。未确认前不得说“已经记下”，不得输出终态 intent。
 ```
 
 ## Recommended Use Cases
@@ -230,6 +268,7 @@ When auditing or importing a smart Agent with information collection, verify:
 - `{collectParam}` appears exactly once when using standard mode.
 - Field descriptions are precise and evidence-based.
 - If phone-number collection is configured, the prompt and field description include the phone-number confirmation gate: 11-digit candidate -> readback -> explicit confirmation -> then follow-up / terminal routing.
+- If WeChat / contact collection is configured, the prompt and field plan distinguish `联系方式类型`, `客户手机号`, `客户微信号`, and confirmation status; non-phone WeChat IDs are never stored in the phone field.
 - Inline `param` JSON, if used, has field names matching configured dialogue fields.
 - Intent output format remains valid.
 - Terminal-closing ownership remains valid.
