@@ -144,7 +144,7 @@ Use these only when the scenario needs customer identity or follow-up qualificat
 字段描述：仅当用户明确说出姓名、称呼或“我叫...”时填写用户姓名或称呼；未表达时留空或写“未提及”；不得从手机号、公司名或语气猜测。
 
 字段名：客户手机号
-字段描述：仅当用户明确说出完整手机号或可合并的分段手机号时填写 11 位手机号；进入手机号采集中状态后，支持客户分2次、分8次、甚至一位一位慢速报号，并在本次手机号采集会话内持续累积数字片段、中文数字、幺/一/零等号码表达；未完整表达时留空或写“未完整”；不得编造缺失数字，不得把时间、金额、业务量拼入手机号。
+字段描述：仅当用户明确说出完整手机号或可合并的分段手机号时形成 11 位候选手机号；进入手机号采集中状态后，支持客户分2次、分8次、甚至一位一位慢速报号，并在本次手机号采集会话内持续累积数字片段、中文数字、幺/一/零等号码表达；形成 11 位候选号码后必须先复述核对，客户确认后才填写为已确认手机号；未完整表达或未确认时留空、写“未完整”或“待确认”；不得编造缺失数字，不得把时间、金额、业务量拼入手机号。
 
 字段名：公司名称
 字段描述：仅当用户明确说出公司、单位、机构或店铺名称时填写原话中的名称；未表达时留空或写“未提及”；不得把职位、行业或项目名误当作公司名称。
@@ -163,6 +163,25 @@ When the scenario collects phone numbers:
 - Do not force the user to restart after every incomplete fragment. Use continuation prompts such as: `好的，我先听到前面这一段了，您继续往后报就行。`
 - Only ask the user to restart when they explicitly say the previous digits were wrong, the accumulated digits exceed 11 and cannot be resolved, or repeated attempts still cannot form a valid number.
 - Do not merge time or scheduling expressions into the phone number, such as `六点之前`, `下午三点`, `明天`, or `一会儿`.
+
+### Phone Number Confirmation Gate
+
+Collecting 11 digits is not the end of the phone-number flow. It only creates a candidate number.
+
+Required behavior:
+
+1. If the user only says "记一下我手机号" but has not reported digits, ask them to report the number. Do not say the number has been recorded.
+2. When the candidate reaches 11 digits, read it back before any terminal routing, for example: `我跟您核对一下，是 18210235565，对吗？`
+3. Only after explicit confirmation such as `对` / `是` / `没错` / `可以`, treat the phone number as confirmed and allow follow-up or terminal `intent` output.
+4. If the user says `不对` / `错了` / `重来`, clear the candidate and restart collection.
+5. If the user corrects part of the number, update the candidate from the correction, then read back the full 11-digit number again.
+6. Before confirmation, do not say `已经记下`, do not promise that a consultant will call this number, and do not output a terminal `intent` solely because 11 digits were heard.
+
+Recommended prompt rule:
+
+```text
+手机号确认门：当你在手机号采集中累积出 11 位候选号码后，必须先完整复述给用户核对，例如“我跟您核对一下，是 18210235565，对吗？”只有用户明确确认后，才视为已确认手机号并继续后续收口或意图跳转；如果用户否认、纠正或要求重来，按用户纠正内容更新或清空候选号码，并再次复述核对。未确认前不得说“已经记下”，不得输出终态 intent。
+```
 
 ## Recommended Use Cases
 
@@ -210,6 +229,7 @@ When auditing or importing a smart Agent with information collection, verify:
 - If the lower `信息采集` section is also used, `infoCollectEnabled` and `infoCollectConfigList` should be checked separately and named separately in reports.
 - `{collectParam}` appears exactly once when using standard mode.
 - Field descriptions are precise and evidence-based.
+- If phone-number collection is configured, the prompt and field description include the phone-number confirmation gate: 11-digit candidate -> readback -> explicit confirmation -> then follow-up / terminal routing.
 - Inline `param` JSON, if used, has field names matching configured dialogue fields.
 - Intent output format remains valid.
 - Terminal-closing ownership remains valid.
