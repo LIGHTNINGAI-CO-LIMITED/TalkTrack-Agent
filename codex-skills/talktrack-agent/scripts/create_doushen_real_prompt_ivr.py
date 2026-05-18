@@ -11,6 +11,8 @@ import requests
 
 BASE_URL = "https://ai.sd6g.com:1904/api/web"
 RAW_PROMPT_CHAR_LIMIT = 10000
+DEFAULT_SMART_AGENT_MODEL_ID = 55
+DEFAULT_SMART_AGENT_MODEL_NAME = "闪电26BMoE-fast"
 
 
 def compact_prompt(text: str) -> str:
@@ -113,10 +115,27 @@ def resolve_new_ivr_id(created, client: Client, name: str) -> int:
     raise RuntimeError("Could not resolve new IVR id")
 
 
+def normalize_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def find_default_model_name(model_response) -> str:
+    for model in model_response.get("data") or []:
+        if normalize_int(model.get("id")) == DEFAULT_SMART_AGENT_MODEL_ID:
+            return model.get("modelName") or ""
+    raise RuntimeError(
+        f"Default smart-Agent model missing: "
+        f"id={DEFAULT_SMART_AGENT_MODEL_ID} name={DEFAULT_SMART_AGENT_MODEL_NAME}"
+    )
+
+
 def update_smart_node(node, node_name: str, prompt: str):
     node["name"] = node_name
     config = node.setdefault("llmNodeModelConfig", {})
-    config.setdefault("id", 55)
+    config["id"] = DEFAULT_SMART_AGENT_MODEL_ID
     config["prompt"] = prompt
     config["enableThinking"] = 0
     config["enable_thinking"] = 0
@@ -131,7 +150,7 @@ def update_smart_cell(cell, node_name: str, prompt: str, description: str):
     custom = data.setdefault("customData", {})
     custom["name"] = node_name
     config = custom.setdefault("llmNodeModelConfig", {})
-    config.setdefault("id", 55)
+    config["id"] = DEFAULT_SMART_AGENT_MODEL_ID
     config["prompt"] = prompt
     config["enableThinking"] = 0
     config["enable_thinking"] = 0
@@ -199,6 +218,20 @@ def try_delete(client: Client, ivr_id: int):
     return {"status": "not_confirmed", "last": last}
 
 
+def assert_model_readback(model_ids):
+    bad = {
+        key: value
+        for key, value in model_ids.items()
+        if normalize_int(value) != DEFAULT_SMART_AGENT_MODEL_ID
+    }
+    if bad:
+        raise RuntimeError(
+            f"smart-Agent model readback mismatch; expected "
+            f"{DEFAULT_SMART_AGENT_MODEL_NAME} id={DEFAULT_SMART_AGENT_MODEL_ID}, "
+            f"got={bad}"
+        )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--token", required=True)
@@ -216,7 +249,9 @@ def main():
     Client.assert_ok(info, "validate token")
     Client.assert_ok(client.get("/industry/findList"), "read industries")
     Client.assert_ok(client.get("/ivr/findAllTtsVoiceBaseInfo"), "read tts voices")
-    Client.assert_ok(client.get("/ivr/findModelList"), "read models")
+    model_response = client.get("/ivr/findModelList")
+    Client.assert_ok(model_response, "read models")
+    default_model_name = find_default_model_name(model_response)
 
     raw_prompt = prompt_path.read_text(encoding="utf-8")
     compacted_prompt = compact_prompt(raw_prompt)
@@ -283,6 +318,12 @@ def main():
     backend_prompt = rb_backend["llmNodeModelConfig"]["prompt"]
     frontend_prompt = rb_frontend["llmNodeModelConfig"]["prompt"]
     graph_prompt = rb_cell["data"]["customData"]["llmNodeModelConfig"]["prompt"]
+    model_ids = {
+        "backend": rb_backend["llmNodeModelConfig"].get("id"),
+        "frontend": rb_frontend["llmNodeModelConfig"].get("id"),
+        "graph": rb_cell["data"]["customData"]["llmNodeModelConfig"].get("id"),
+    }
+    assert_model_readback(model_ids)
 
     cleanup = None
     if args.cleanup_ivr_id:
@@ -305,6 +346,11 @@ def main():
         "promptCompactedChars": len(compacted_prompt),
         "promptStrategy": prompt_strategy,
         "promptSha256": prompt_hash,
+        "expectedModelId": DEFAULT_SMART_AGENT_MODEL_ID,
+        "expectedModelName": DEFAULT_SMART_AGENT_MODEL_NAME,
+        "modelNameFromCatalog": default_model_name,
+        "modelIds": model_ids,
+        "modelIdMatches": True,
         "backendPromptMatches": backend_prompt == prompt,
         "frontendPromptMatches": frontend_prompt == prompt,
         "graphPromptMatches": graph_prompt == prompt,

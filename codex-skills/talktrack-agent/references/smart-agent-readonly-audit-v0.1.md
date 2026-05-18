@@ -82,7 +82,8 @@ Typical deductions:
 Check across backend node, frontend node, and graph custom data:
 
 - `llmNodeModelConfig` exists.
-- Model ID is present and matches the expected business choice when specified.
+- Model ID is present and defaults to the expected smart-Agent model: `闪电26BMoE-fast` / `llmNodeModelConfig.id=55`.
+- If another model is present, for example `a-qwen3.5-122b-a10b` / `id=41`, require explicit user approval or mark it as a configuration issue.
 - `prompt` is non-empty.
 - Timeout / max speak round fields are present when exposed.
 - `enableThinking` / `enable_thinking` is explicit when exposed.
@@ -92,6 +93,7 @@ Typical deductions:
 
 - P0-sized: missing model config or empty prompt on the active smart node.
 - P1-sized: model ID, timeout, thinking flag, or prompt differs across surfaces.
+- P1-sized by default: model ID is not `55` and there is no explicit user-approved exception.
 - P2-sized: optional model metadata missing but behavior appears safe.
 
 ### 3. Prompt Readback Integrity: 20

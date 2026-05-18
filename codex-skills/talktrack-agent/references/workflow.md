@@ -199,6 +199,13 @@ Smart Agent node:
 }
 ```
 
+Model rule:
+
+- Default and required smart-Agent model: `闪电26BMoE-fast`.
+- Backend model ID: `llmNodeModelConfig.id=55`.
+- Do not inherit a template's previous model. In particular, `a-qwen3.5-122b-a10b` is `id=41` and must be replaced with `id=55` unless the user explicitly approves an exception.
+- Force `id=55` in backend node, frontend node, and graph `customData`, then read back all three copies.
+
 Keep these synchronized:
 
 - Backend node: `sceneList[0].nodeList[0]`
@@ -268,7 +275,7 @@ Check:
 - Scene name is expected.
 - Smart node has `type=4`.
 - Node is start node if intended.
-- `llmNodeModelConfig.id` is expected.
+- `llmNodeModelConfig.id=55` in backend node, frontend node, and graph `customData`; the expected model is `闪电26BMoE-fast`.
 - Prompt length/hash matches the exact prompt variant written: raw if under 10,000 characters, compacted only when required.
 - Prompt matches in backend node, frontend node, and graph custom data.
 - For intent-enabled prompts, the imported prompt still follows `intent-usage-rules.md`.

@@ -1,6 +1,6 @@
 ---
 name: talktrack-agent
-version: v0.1.7
+version: v0.1.8
 github_repo: LIGHTNINGAI-CO-LIMITED/TalkTrack-Agent
 github_path: codex-skills/talktrack-agent
 github_branch: main
@@ -43,6 +43,7 @@ If the check fails because GitHub or the network is unavailable, mention the fai
 - Document-to-prompt conversion is draft-only by default. Do not import a generated prompt into the backend until the user explicitly approves the generated prompt package and target IVR / node.
 - For write operations, create or use a test/new IVR unless the user explicitly asks to modify an existing production IVR.
 - For `updateSceneList`, snapshot existing config first and verify by reading it back.
+- For smart Agent model parameters, the default and required model is `闪电26BMoE-fast` with `llmNodeModelConfig.id=55`. Do not inherit a template's old model, including `a-qwen3.5-122b-a10b` (`id=41`). When creating, importing, or updating a smart Agent, force `id=55` in backend node, frontend node, and graph `customData`, then read back all three copies.
 - Keep raw JSON, full backend snapshots, and large exported artifacts under `D:\闪电智能\tmp`; write durable reports and SOP summaries to the formal Obsidian vault when the user asks for an artifact.
 - On Windows, do not use Windows PowerShell 5 for Chinese JSON write requests or inline Chinese payloads; use a UTF-8 Python script or UTF-8 files. PowerShell 5 may mojibake Chinese names/prompts.
 - When configuring, checking, or importing a prompt that contains `intent`, read `references/intent-usage-rules.md` first and enforce it against the prompt plus IVR ports/mappings.
@@ -66,7 +67,7 @@ If the check fails because GitHub or the network is unavailable, mention the fai
 4. Read base resources:
    - `GET /industry/findList`
    - `GET /ivr/findAllTtsVoiceBaseInfo`
-   - `GET /ivr/findModelList`
+   - `GET /ivr/findModelList`; confirm `id=55` is `闪电26BMoE-fast`
    - `POST /ivr/findPage` with `{"query":{"searchName":""},"page":{"current":1,"size":10}}`
 5. Create IVR with `/ivr/insert`, or read the target IVR if updating.
 6. For smart Agent nodes, clone a known-good scene graph shape from an existing IVR, then replace only business fields.
@@ -98,7 +99,7 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 ## Bundled Scripts
 
 - Use `scripts/check_skill_update.py --check` before starting a task to compare the local skill version with GitHub. Use `--apply` only after the user confirms they want to update the local installed skill.
-- Use `scripts/create_doushen_real_prompt_ivr.py` for "create a new IVR from a stable template + import a UTF-8 prompt" tasks when its parameters fit. It validates the token, clones the template graph, writes raw prompts under 10,000 characters unchanged, falls back to compacted prompt only after length/failure, and reports `promptStrategy`, `promptWrittenChars`, hashes, readback matches, port labels, and terminal nodes.
+- Use `scripts/create_doushen_real_prompt_ivr.py` for "create a new IVR from a stable template + import a UTF-8 prompt" tasks when its parameters fit. It validates the token, clones the template graph, forces the smart-Agent model to `闪电26BMoE-fast` (`llmNodeModelConfig.id=55`) instead of inheriting the template model, writes raw prompts under 10,000 characters unchanged, falls back to compacted prompt only after length/failure, and reports `promptStrategy`, `promptWrittenChars`, hashes, model readback matches, port labels, and terminal nodes.
 - Run bundled scripts with a token argument only for the current task; do not hardcode real tokens into scripts, docs, commits, or examples.
 
 ## Key API Rules
@@ -118,6 +119,7 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 
 - Smart Agent node type is `type: 4`.
 - Agent model config lives at `llmNodeModelConfig`.
+- Smart Agent default model must be `闪电26BMoE-fast` (`llmNodeModelConfig.id=55`). Treat any template-inherited model such as `a-qwen3.5-122b-a10b` (`id=41`) as a configuration bug unless the user explicitly requests an exception.
 - Front visible `智能信息采集` state lives at `llmNodeCollectParamEnabled` and field list at `llmNodeCollectParamList`. To make the page show `采集`, set and read back `llmNodeCollectParamEnabled=1` in backend, frontend node list, and graph custom data.
 - Lower `信息采集` model extraction lives at `infoCollectEnabled` and `infoCollectConfigList`. It can coexist with the front switch, but it does not prove the front visible `智能信息采集` radio is enabled.
 - When the scenario includes phone-number collection, configure prompt and field descriptions for session-level accumulation of segmented digits; if the lower extractor is used for phone capture, set a recognition round that covers the expected reporting pattern, up to `11` for one-digit-at-a-time reporting.
