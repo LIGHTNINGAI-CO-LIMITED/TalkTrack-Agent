@@ -111,12 +111,39 @@ def raw_url(path: str) -> str:
     return f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{path}"
 
 
+def contents_url(path: str) -> str:
+    return f"https://api.github.com/repos/{REPO}/contents/{path}?ref={BRANCH}"
+
+
 def tree_url() -> str:
     return f"https://api.github.com/repos/{REPO}/git/trees/{BRANCH}?recursive=1"
 
 
 def remote_skill_path() -> str:
     return f"{REMOTE_PREFIX}/SKILL.md" if REMOTE_PREFIX else "SKILL.md"
+
+
+def decode_contents_payload(text: str, path: str) -> bytes:
+    payload = json.loads(text)
+    if payload.get("type") != "file":
+        raise UpdateCheckError(f"github_contents_not_file path={path}")
+    if payload.get("encoding") != "base64":
+        raise UpdateCheckError(
+            f"github_contents_unexpected_encoding path={path} "
+            f"encoding={payload.get('encoding')}"
+        )
+    return base64.b64decode((payload.get("content") or "").encode("ascii"))
+
+
+def request_contents_bytes(path: str) -> bytes:
+    return decode_contents_payload(request_text(contents_url(path)), path)
+
+
+def request_remote_file_bytes(path: str) -> bytes:
+    try:
+        return request_contents_bytes(path)
+    except Exception:
+        return request_bytes(raw_url(path))
 
 
 def parse_frontmatter(text: str) -> Dict[str, str]:
@@ -160,7 +187,7 @@ def local_metadata() -> Dict[str, str]:
 
 
 def remote_metadata() -> Dict[str, str]:
-    return parse_frontmatter(request_text(raw_url(remote_skill_path())))
+    return parse_frontmatter(request_remote_file_bytes(remote_skill_path()).decode("utf-8"))
 
 
 def get_status() -> Dict[str, str]:
@@ -218,7 +245,7 @@ def apply_update(force: bool = False) -> List[str]:
     for remote_path, relative_path in remote_files():
         target_path = LOCAL_ROOT / Path(relative_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_bytes(request_bytes(raw_url(remote_path)))
+        target_path.write_bytes(request_remote_file_bytes(remote_path))
         updated.append(relative_path)
     return sorted(updated)
 
