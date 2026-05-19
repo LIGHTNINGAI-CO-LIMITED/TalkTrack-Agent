@@ -1,6 +1,6 @@
 ---
 name: talktrack-agent
-version: v0.1.9
+version: v0.1.10
 github_repo: LIGHTNINGAI-CO-LIMITED/TalkTrack-Agent
 github_path: codex-skills/talktrack-agent
 github_branch: main
@@ -26,6 +26,18 @@ python "C:\Users\luona\.codex\skills\talktrack-agent\scripts\check_skill_update.
 ```
 
 If the check fails because GitHub, TLS/certificate chain, or the network is unavailable, do not treat the local skill as up-to-date. Report the local version and failure reason. For backend write/import/configuration tasks, pause and ask the user to update the skill or explicitly approve continuing with the local version. For read-only emergency investigation, you may continue only after stating that update status is unknown. The update check must not use, print, store, or request business API tokens; it only reads the public GitHub skill repository.
+
+### Old Local Version Bootstrap
+
+If a user or coworker is still on `v0.1.7` and the update check says it is stuck on the local Python certificate chain, the old checker cannot reliably self-update. Do not continue with backend write/import/configuration work under that old skill. Ask them to run the bootstrap updater first:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\talktrack-agent\scripts\bootstrap_update_talktrack_agent.ps1"
+```
+
+If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, provide the one-time copy-ready bootstrap prompt from Obsidian:
+
+`D:\ObsidianVault\闪电智能知识库\20-Skills\talktrack-agent\TalkTrack-Agent_v0.1.10_旧版自救升级提示词_20260519.md`
 
 ## Boundary
 
@@ -99,6 +111,7 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 ## Bundled Scripts
 
 - Use `scripts/check_skill_update.py --check` before starting a task to compare the local skill version with GitHub. The checker tries multiple fetch channels: Python `urllib`, `certifi` when installed, `curl.exe`, and PowerShell `WebClient`, so TLS/certificate-chain issues in one channel do not immediately block the check. Use `--apply` only after the user confirms they want to update the local installed skill.
+- Use `scripts/bootstrap_update_talktrack_agent.ps1` when an old local skill cannot self-update because the old Python-only update checker is blocked by local TLS/certificate-chain issues.
 - Use `scripts/create_doushen_real_prompt_ivr.py` for "create a new IVR from a stable template + import a UTF-8 prompt" tasks when its parameters fit. It validates the token, clones the template graph, forces the smart-Agent model to `闪电26BMoE-fast` (`llmNodeModelConfig.id=55`) instead of inheriting the template model, writes raw prompts under 10,000 characters unchanged, falls back to compacted prompt only after length/failure, and reports `promptStrategy`, `promptWrittenChars`, hashes, model readback matches, port labels, and terminal nodes.
 - Run bundled scripts with a token argument only for the current task; do not hardcode real tokens into scripts, docs, commits, or examples.
 
