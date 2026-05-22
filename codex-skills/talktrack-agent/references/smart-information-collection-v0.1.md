@@ -98,6 +98,7 @@ Acceptance gate:
 - Negative IDs, invented IDs, stale template IDs, or fields missing from variable management are not acceptable.
 - `{collectParam}` must appear exactly once in the prompt.
 - `infoCollectEnabled=1` alone is not a pass for the visible `智能信息采集` radio group. It only proves the lower `信息采集` section is enabled.
+- After changing collection fields, canvas-save validation must pass: the smart Agent drawer can reopen, `智能信息采集=采集` remains visible, fields remain selectable from variable management, and page save/update succeeds. If real click-save is unavailable, simulated page-save validation must be documented with the exact limitation.
 
 Recommended prompt line:
 
@@ -304,6 +305,7 @@ When auditing or importing a smart Agent with information collection, verify:
 - Inline `param` JSON, if used, has field names matching configured dialogue fields.
 - Intent output format remains valid.
 - Terminal-closing ownership remains valid.
+- After a write task, the `/script-graph?ivrId=<ivrId>` canvas can open and save/update from the page view, or the report clearly says only simulated canvas-save validation was possible.
 
 ## Human Confirmation Required
 

@@ -289,7 +289,21 @@ Check:
 - No negative temporary IDs, guessed IDs, stale template IDs, or canvas-only field definitions are present in collection config.
 - Dialogue-field descriptions are evidence-based and privacy-minimized.
 
-Optional browser check:
+## Canvas-Save Validation
+
+For any backend write that touches `sceneListFrontend`, graph `customData`, prompt, routing intents, model config, or smart information collection fields, finish with a user-perspective canvas-save validation.
+
+Required checks:
+
+- Open `https://ai.sd6g.com:1904/script-graph?ivrId=<ivrId>`.
+- Refresh any already-open old tab before saving; stale page memory can overwrite repaired canvas data.
+- Confirm the smart Agent drawer opens and the intended prompt, model, intent ports, and information-collection fields are visible.
+- Confirm the page can save/update successfully from the canvas view.
+- If a real browser save click is unavailable, simulate the page-save shape as far as possible, verify the fields the page reads are present, and state this limitation in the report.
+
+API readback alone is not enough for graph-affecting writes because the page may rebuild routes or collection fields from frontend canvas data.
+
+Canvas URL:
 
 ```text
 https://ai.sd6g.com:1904/script-graph?ivrId=<ivrId>

@@ -9,6 +9,7 @@ This scorer is for `talktrack-agent` smart Agent / smart-node work. It is not a 
 - Read-only only.
 - Do not call any endpoint whose path or operation implies `update`, `insert`, `delete`, `save`, or `create`.
 - Do not run text debug or voice debug unless the user explicitly changes the scope.
+- Do not click page save/update during a read-only audit. You may inspect whether canvas data appears save-safe, but actual canvas-save validation belongs to a write-validation pass.
 - Do not print, persist, or archive real tokens.
 - Do not copy full raw JSON into Obsidian. Keep raw JSON under `D:\闪电智能\tmp` and record only paths in the report.
 

@@ -1,6 +1,6 @@
 ---
 name: talktrack-agent
-version: v0.1.16
+version: v0.1.17
 github_repo: LIGHTNINGAI-CO-LIMITED/TalkTrack-Agent
 github_path: codex-skills/talktrack-agent
 github_branch: main
@@ -73,6 +73,7 @@ If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, p
 - Document-to-prompt conversion is draft-only by default. Do not import a generated prompt into the backend until the user explicitly approves the generated prompt package and target IVR / node.
 - For write operations, create or use a test/new IVR unless the user explicitly asks to modify an existing production IVR.
 - For `updateSceneList`, snapshot existing config first and verify by reading it back.
+- After any backend write that changes `sceneListFrontend`, graph `customData`, smart-node prompt, routing intents, model config, or smart information collection fields, run canvas-save validation before declaring success. From the user's perspective, the IVR must open at `/script-graph?ivrId=<ivrId>` and the page must be able to save/update without frontend route/config corruption. If a real browser save click is unavailable, simulate the page-save shape as far as possible, verify the fields the page will read are present, and state the limitation in the report. API readback alone is not enough for graph-affecting writes.
 - For smart Agent model parameters, the default and required model is `闪电26BMoE-fast` with `llmNodeModelConfig.id=55`. Do not inherit a template's old model, including `a-qwen3.5-122b-a10b` (`id=41`). When creating, importing, or updating a smart Agent, force `id=55` in backend node, frontend node, and graph `customData`, then read back all three copies.
 - Keep raw JSON, full backend snapshots, and large exported artifacts under `D:\闪电智能\tmp`; write durable reports and SOP summaries to the formal Obsidian vault when the user asks for an artifact.
 - On Windows, do not use Windows PowerShell 5 for Chinese JSON write requests or inline Chinese payloads; use a UTF-8 Python script or UTF-8 files. PowerShell 5 may mojibake Chinese names/prompts.
@@ -106,7 +107,7 @@ If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, p
 7. If the prompt contains `intent`, read `references/intent-usage-rules.md`; verify non-hangup intents use current node IDs, hangup intents are exactly the four allowed terminal labels, and labels match IVR ports.
 8. If the task involves lead qualification, customer identity, appointment, company, budget, service choice, or other structured follow-up data, read `references/smart-information-collection-v0.1.md`, infer collection fields from the scene, and add `{collectParam}` exactly once to the prompt package. The field list must be generated from the current scene, not copied from a fixed template. If backend writes are authorized, first create/select the approved fields in `变量管理 -> 对话字段`, re-read the variable list, then enable the front-page 智能信息采集 switch (`llmNodeCollectParamEnabled=1`) and configure `llmNodeCollectParamList` with the real positive IDs returned by the variable list.
 9. Import prompt Markdown as UTF-8. If the prompt is under 10,000 characters, write it unchanged; only compact when it is 10,000+ characters or a readback-verified write fails with `话术场景信息异常`.
-10. Verify with `/ivr/findSceneList/{ivrId}` and, when useful, open `/script-graph?ivrId=<ivrId>`.
+10. Verify with `/ivr/findSceneList/{ivrId}` and run canvas-save validation: open `/script-graph?ivrId=<ivrId>` and confirm the page can save/update, or document why only simulated page-save validation was possible.
 11. Delete temporary token files or auth dumps.
 
 ## Task Modes
@@ -117,7 +118,7 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 - `doc-to-outbound-prompt`: convert arbitrary source documents into an outbound smart-Agent prompt draft. Draft-only; no backend writes.
 - `prompt-package-review`: review a generated prompt package for factual grounding, intent rules, privacy risk, length, and import readiness.
 - `smart-info-collection-design`: design 智能信息采集 dialogue fields, field descriptions, `{collectParam}` placement, and evidence rules for a smart Agent prompt package. Use this proactively when the scenario implies structured follow-up data, even if the user did not use the exact phrase "智能信息采集".
-- `smart-info-collection-configure`: create/select approved scenario-derived fields in `变量管理 -> 对话字段`, re-read the variable list, enable 智能信息采集 (`llmNodeCollectParamEnabled=1`), populate `llmNodeCollectParamList` with the returned real field IDs, update the prompt with `{collectParam}`, and verify backend readback. Requires explicit backend modification authorization and a clear target IVR / smart node. Acceptance requires `llmNodeCollectParamEnabled=1` in backend node, `sceneListFrontend.nodeList`, and graph `customData`; every `llmNodeCollectParamList[].id` must match an existing dialogue field from variable management; `infoCollectEnabled=1` alone is not enough because the visible radio group will still show `不采集`.
+- `smart-info-collection-configure`: create/select approved scenario-derived fields in `变量管理 -> 对话字段`, re-read the variable list, enable 智能信息采集 (`llmNodeCollectParamEnabled=1`), populate `llmNodeCollectParamList` with the returned real field IDs, update the prompt with `{collectParam}`, and verify backend readback. Requires explicit backend modification authorization and a clear target IVR / smart node. Acceptance requires `llmNodeCollectParamEnabled=1` in backend node, `sceneListFrontend.nodeList`, and graph `customData`; every `llmNodeCollectParamList[].id` must match an existing dialogue field from variable management; `infoCollectEnabled=1` alone is not enough because the visible radio group will still show `不采集`; canvas-save validation must pass or be explicitly reported as simulated-only.
 - `smart-info-collection-check`: verify an existing smart Agent prompt/config uses information collection safely, without breaking intent JSON or terminal-closing ownership.
 - `prompt-import`: import a Markdown prompt into an existing smart node and validate prompt readback. Requires explicit write authorization.
 - `readonly-audit`: inspect existing IVR / smart-node configuration without backend writes.
