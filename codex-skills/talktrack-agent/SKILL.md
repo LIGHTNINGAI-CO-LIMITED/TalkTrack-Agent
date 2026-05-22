@@ -1,6 +1,6 @@
 ---
 name: talktrack-agent
-version: v0.1.17
+version: v0.1.18
 github_repo: LIGHTNINGAI-CO-LIMITED/TalkTrack-Agent
 github_path: codex-skills/talktrack-agent
 github_branch: main
