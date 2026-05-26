@@ -4,15 +4,82 @@ import copy
 import datetime as dt
 import hashlib
 import json
+import re
+from urllib.parse import unquote
 from pathlib import Path
 
 import requests
 
 
-BASE_URL = "https://ai.sd6g.com:1904/api/web"
+BACKENDS = {
+    "domestic": {
+        "webBase": "https://ai.sd6g.com:1904",
+        "apiBase": "https://ai.sd6g.com:1904/api/web",
+    },
+    "overseas": {
+        "webBase": "https://ai.tbot360.com",
+        "apiBase": "https://ai.tbot360.com/api/web",
+    },
+}
 RAW_PROMPT_CHAR_LIMIT = 10000
 DEFAULT_SMART_AGENT_MODEL_ID = 55
 DEFAULT_SMART_AGENT_MODEL_NAME = "闪电26BMoE-fast"
+
+
+def extract_access_token(value: str) -> str:
+    decoded = unquote((value or "").strip())
+    match = re.search(r"[0-9a-fA-F]{32}", decoded)
+    if match:
+        return match.group(0)
+    decoded = re.sub(r"^\s*token\s*=\s*", "", decoded, flags=re.I)
+    decoded = re.sub(r"^\s*Bearer\s+", "", decoded, flags=re.I).strip().strip("\"'")
+    match = re.search(r"[A-Za-z0-9._-]{20,}", decoded)
+    if match:
+        return match.group(0)
+    raise RuntimeError("No usable access token found. Paste a token, token=Bearer%20..., or -H 'token: Bearer ...'.")
+
+
+def backend_from_url(value: str) -> str | None:
+    lower = (value or "").lower()
+    if "ai.sd6g.com:1904" in lower or "sd6g.com:1904" in lower:
+        return "domestic"
+    if "ai.tbot360.com" in lower or "tbot360.com" in lower:
+        return "overseas"
+    return None
+
+
+def probe_backend(region: str, token: str) -> dict:
+    meta = BACKENDS[region]
+    headers = {"token": f"Bearer {token}", "X-Requested-With": "XMLHttpRequest"}
+    try:
+        resp = requests.get(f"{meta['apiBase']}/account/findInfo", headers=headers, timeout=20)
+        resp.encoding = "utf-8"
+        data = resp.json()
+    except Exception as exc:
+        return {"region": region, "ok": False, "error": type(exc).__name__}
+    return {"region": region, "ok": str(data.get("code")) == "0", "code": data.get("code"), "data": data.get("data") or {}}
+
+
+def resolve_backend(token_text: str, backend_region: str = "auto", backend_url: str = "") -> dict:
+    token = extract_access_token(token_text)
+    hinted = backend_from_url(backend_url)
+    if backend_region != "auto" and hinted and backend_region != hinted:
+        raise RuntimeError(f"backend region conflict: --backend-region={backend_region}, --backend-url points to {hinted}")
+    if backend_region != "auto":
+        candidates = [backend_region]
+    elif hinted:
+        candidates = [hinted]
+    else:
+        candidates = list(BACKENDS)
+    probes = [probe_backend(region, token) for region in candidates]
+    ok = [item for item in probes if item.get("ok")]
+    if not ok:
+        raise RuntimeError(f"token validation failed for candidate backends: {probes}")
+    if len(ok) > 1:
+        raise RuntimeError("token validates against multiple backends; pass --backend-region domestic or overseas")
+    region = ok[0]["region"]
+    meta = BACKENDS[region]
+    return {"region": region, "token": token, "webBase": meta["webBase"], "apiBase": meta["apiBase"], "accountInfo": ok[0]}
 
 
 def compact_prompt(text: str) -> str:
@@ -32,7 +99,10 @@ def compact_prompt(text: str) -> str:
 
 
 class Client:
-    def __init__(self, token: str):
+    def __init__(self, token: str, backend: dict):
+        self.backend = backend
+        self.base_url = backend["apiBase"]
+        self.web_base = backend["webBase"]
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -56,10 +126,10 @@ class Client:
             )
 
     def get(self, path: str):
-        return self._json(self.session.get(f"{BASE_URL}{path}", timeout=60))
+        return self._json(self.session.get(f"{self.base_url}{path}", timeout=60))
 
     def post(self, path: str, body):
-        return self._json(self.session.post(f"{BASE_URL}{path}", json=body, timeout=60))
+        return self._json(self.session.post(f"{self.base_url}{path}", json=body, timeout=60))
 
 
 def parse_json_maybe(value):
@@ -235,17 +305,20 @@ def assert_model_readback(model_ids):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--token", required=True)
+    parser.add_argument("--backend-region", choices=["auto", "domestic", "overseas"], default="auto")
+    parser.add_argument("--backend-url", default="", help="Optional page/API URL hint such as https://ai.tbot360.com/script-graph?ivrId=...")
     parser.add_argument("--prompt-path", required=True)
     parser.add_argument("--template-ivr-id", type=int, default=3449)
     parser.add_argument("--cleanup-ivr-id", type=int)
     args = parser.parse_args()
 
-    client = Client(args.token)
+    backend = resolve_backend(args.token, args.backend_region, args.backend_url)
+    client = Client(backend["token"], backend)
     prompt_path = Path(args.prompt_path)
     if not prompt_path.exists():
         raise FileNotFoundError(prompt_path)
 
-    info = client.get("/account/findInfo")
+    info = {"code": backend["accountInfo"].get("code"), "data": backend["accountInfo"].get("data") or {}}
     Client.assert_ok(info, "validate token")
     Client.assert_ok(client.get("/industry/findList"), "read industries")
     Client.assert_ok(client.get("/ivr/findAllTtsVoiceBaseInfo"), "read tts voices")
@@ -359,7 +432,9 @@ def main():
         "templateBackupPath": str(template_backup),
         "finalBackupPath": str(final_backup),
         "cleanup": cleanup,
-        "url": f"https://ai.sd6g.com:1904/script-graph?ivrId={new_ivr_id}",
+        "backendRegion": backend["region"],
+        "apiBase": backend["apiBase"],
+        "url": f"{backend['webBase']}/script-graph?ivrId={new_ivr_id}",
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

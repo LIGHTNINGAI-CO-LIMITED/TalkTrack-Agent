@@ -10,10 +10,12 @@ Use:
 token: Bearer <TOKEN>
 ```
 
-Validate before doing anything:
+Resolve and validate before doing anything. If the user provides a URL, use it as the backend hint. If the user only pastes a token, extract the token and probe both backends.
 
 ```http
 GET https://ai.sd6g.com:1904/api/web/account/findInfo
+GET https://ai.tbot360.com/api/web/account/findInfo
+Header: token: Bearer <TOKEN>
 ```
 
 Expected success:
@@ -22,7 +24,7 @@ Expected success:
 {"code":"0","message":"success","data":{...}}
 ```
 
-If `code=7`, the token is invalid or expired. Ask for a fresh token. Do not jump to captcha login unless the user asks.
+Domestic API base is `https://ai.sd6g.com:1904/api/web`; overseas API base is `https://ai.tbot360.com/api/web`. If `code=7`, first check that the token was normalized correctly and that the header is `token: Bearer <TOKEN>`, not raw `token: <TOKEN>` and not `Authorization`. Ask for a fresh token only after the normalized token fails on the intended backend.
 
 ## Common Request Pattern
 
@@ -31,7 +33,7 @@ On Windows, avoid Windows PowerShell 5 for write requests that contain Chinese s
 PowerShell is acceptable for ASCII-only reads and quick checks:
 
 ```powershell
-$base = 'https://ai.sd6g.com:1904/api/web'
+$base = '<resolved-api-base>'
 $headers = @{ token = 'Bearer <TOKEN>'; 'X-Requested-With' = 'XMLHttpRequest' }
 $info = Invoke-RestMethod -Method Get -Uri "$base/account/findInfo" -Headers $headers
 ```
@@ -50,7 +52,7 @@ For Chinese write payloads, prefer this pattern:
 ```python
 import json, requests
 
-base = "https://ai.sd6g.com:1904/api/web"
+base = "<resolved-api-base>"
 headers = {"token": "Bearer <TOKEN>", "X-Requested-With": "XMLHttpRequest"}
 
 payload = {
@@ -68,12 +70,12 @@ data = r.json()
 For "create a new IVR from a stable template + import prompt Markdown" tasks, prefer the skill script when it fits instead of rewriting request code:
 
 ```powershell
-python scripts/create_doushen_real_prompt_ivr.py --token <TOKEN> --prompt-path <UTF8_MD> --template-ivr-id 3449
+python scripts/create_doushen_real_prompt_ivr.py --token <TOKEN_OR_CURL_FRAGMENT> --backend-region auto --prompt-path <UTF8_MD> --template-ivr-id 3449
 ```
 
-The script uses Python `requests` and UTF-8 file reads/writes to avoid Windows PowerShell 5 Chinese encoding problems. It applies the raw-prompt policy automatically: prompts under 10,000 characters are written unchanged; compacted prompt is used only when the raw prompt is 10,000+ characters or a raw write fails and a compact fallback is required.
+The script resolves domestic/overseas from the token or optional `--backend-url`, then uses Python `requests` and UTF-8 file reads/writes to avoid Windows PowerShell 5 Chinese encoding problems. It applies the raw-prompt policy automatically: prompts under 10,000 characters are written unchanged; compacted prompt is used only when the raw prompt is 10,000+ characters or a raw write fails and a compact fallback is required.
 
-Read its JSON output before reporting success. Key fields are `promptStrategy`, `promptWrittenChars`, `promptCompactedChars`, `promptSha256`, `backendPromptMatches`, `frontendPromptMatches`, `graphPromptMatches`, `portLabels`, and `terminalNodes`.
+Read its JSON output before reporting success. Key fields are `backendRegion`, `apiBase`, `promptStrategy`, `promptWrittenChars`, `promptCompactedChars`, `promptSha256`, `backendPromptMatches`, `frontendPromptMatches`, `graphPromptMatches`, `portLabels`, and `terminalNodes`.
 
 ## Task Mode Routing
 

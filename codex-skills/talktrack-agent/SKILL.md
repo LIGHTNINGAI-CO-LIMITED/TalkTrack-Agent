@@ -1,15 +1,15 @@
 ---
 name: talktrack-agent
-version: v0.1.19
+version: v0.1.20
 github_repo: LIGHTNINGAI-CO-LIMITED/TalkTrack-Agent
 github_path: codex-skills/talktrack-agent
 github_branch: main
-description: Use when configuring, creating, updating, validating, troubleshooting, read-only scoring, or drafting outbound smart-Agent prompts for Shandian Intelligent admin IVR workflows at ai.sd6g.com:1904, especially tasks involving arbitrary source-document to outbound prompt generation, 话术配置, 智能Agent/智能节点, 智能信息采集, 对话字段, collectParam, /api/web IVR APIs, sceneList/sceneListFrontend, prompt Markdown import, llmNodeModelConfig, intent/port mapping, terminal/hangup intents, smart-Agent audit scoring, or direct Bearer token API calls without logging in. For ordinary-node TalkTrack-Master work, use the talktrack-master skill instead.
+description: Use when configuring, creating, updating, validating, troubleshooting, read-only scoring, or drafting outbound smart-Agent prompts for Shandian Intelligent admin IVR workflows on the domestic backend ai.sd6g.com:1904 or overseas backend ai.tbot360.com, especially tasks involving arbitrary source-document to outbound prompt generation, 话术配置, 智能Agent/智能节点, 智能信息采集, 对话字段, collectParam, /api/web IVR APIs, sceneList/sceneListFrontend, prompt Markdown import, llmNodeModelConfig, intent/port mapping, terminal/hangup intents, smart-Agent audit scoring, or direct Bearer token API calls without logging in. For ordinary-node TalkTrack-Master work, use the talktrack-master skill instead.
 ---
 
 # TalkTrack-Agent
 
-Use this TalkTrack-series skill to operate the Shandian Intelligent smart-Agent layer by API, not by logging into the page. The default path is: the user provides a valid `Bearer` token, validate it with `/account/findInfo`, then call `/api/web` endpoints directly.
+Use this TalkTrack-series skill to operate the Shandian Intelligent smart-Agent layer by API, not by logging into the page. The default path is: the user provides a temporary backend token, normalize it, resolve whether it belongs to the domestic or overseas backend with `/account/findInfo`, then call the selected `/api/web` endpoints directly.
 
 ## Skill Update Check
 
@@ -68,7 +68,8 @@ If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, p
 - Do not use the login page or captcha flow unless there is no valid token and the user explicitly asks for login troubleshooting.
 - Do not print, store in docs, or repeat real tokens/passwords in final answers.
 - Use request header `token: Bearer <TOKEN>`, not `Authorization`.
-- Verify token first with `GET /account/findInfo`; continue only when `code=0`.
+- Resolve backend before any business API call. Domestic uses `https://ai.sd6g.com:1904/api/web`; overseas uses `https://ai.tbot360.com/api/web`. The token source is usually a temporary token pasted by the user, not a secret name. Normalize pasted values such as raw 32-hex tokens, `Bearer ...`, `token=Bearer%20...`, or curl `-H 'token: Bearer ...'`, then validate with `GET /account/findInfo` and `token: Bearer <TOKEN>`. Continue only when exactly one selected/candidate backend returns `code=0`.
+- If the user provides a page/API URL, use its host as the backend hint: `ai.sd6g.com:1904` is domestic, `ai.tbot360.com` is overseas. If URL and token validation disagree, stop and ask the user to provide the matching token or URL. If the same token validates on both backends and no URL/region was provided, stop and ask the user to choose domestic or overseas.
 - Default to read-only API calls unless the user explicitly authorizes backend modification and the target IVR / node / intent scope is clear.
 - Document-to-prompt conversion is draft-only by default. Do not import a generated prompt into the backend until the user explicitly approves the generated prompt package and target IVR / node.
 - For write operations, create or use a test/new IVR unless the user explicitly asks to modify an existing production IVR.
@@ -92,12 +93,14 @@ If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, p
 
 0. Run the Skill Update Check. If a newer GitHub version exists, recommend updating and wait for the user's confirmation before applying it. If the check fails or local version is older than `v0.1.11`, do not ask for backend write authorization yet; first resolve the update/bootstrap gate or obtain an explicit stale-version override using the exact wording in `Stale Version Write Gate`.
 1. Classify the task mode before touching APIs: document-to-prompt drafting, smart Agent creation, prompt import, smart information collection design/check, read-only audit, intent / port check, terminal / hangup check, `llmNodeModelConfig` check, or prompt readback validation.
-2. Extract token from the user's curl or message.
-   - Prefer `-H 'token: Bearer ...'`.
-   - If only cookie is present, URL decode `token=Bearer%20...`.
-3. Validate:
-   - `GET https://ai.sd6g.com:1904/api/web/account/findInfo`
-   - Header: `token: Bearer <TOKEN>`
+2. Resolve the backend from the user's URL/token before any `/api/web` call:
+   - If the user provides a page/API URL, infer domestic from `ai.sd6g.com:1904` and overseas from `ai.tbot360.com`.
+   - Extract a token from the user's curl or message. Accept raw 32-hex tokens, `Bearer ...`, `token=Bearer%20...`, and `-H 'token: Bearer ...'`.
+   - Probe candidate backends with `GET <apiBase>/account/findInfo` and header `token: Bearer <TOKEN>`.
+   - Continue only when the chosen/candidate backend returns `code=0`. If URL and token disagree, or both backends validate without a URL hint, stop for clarification.
+3. Use the resolved context for all subsequent API and page URLs:
+   - domestic: `apiBase=https://ai.sd6g.com:1904/api/web`, `webBase=https://ai.sd6g.com:1904`
+   - overseas: `apiBase=https://ai.tbot360.com/api/web`, `webBase=https://ai.tbot360.com`
 4. Read base resources:
    - `GET /industry/findList`
    - `GET /ivr/findAllTtsVoiceBaseInfo`
@@ -139,7 +142,11 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 
 ## Key API Rules
 
-- Base URL: `https://ai.sd6g.com:1904/api/web`
+- Backend base URL is not hardcoded. Resolve it from the user's URL/token:
+  - domestic API: `https://ai.sd6g.com:1904/api/web`
+  - overseas API: `https://ai.tbot360.com/api/web`
+  - domestic graph: `https://ai.sd6g.com:1904/script-graph?ivrId=<ivrId>`
+  - overseas graph: `https://ai.tbot360.com/script-graph?ivrId=<ivrId>`
 - IVR pagination payload must be:
 
 ```json

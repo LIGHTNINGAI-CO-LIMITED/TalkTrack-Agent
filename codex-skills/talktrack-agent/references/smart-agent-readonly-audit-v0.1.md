@@ -16,8 +16,8 @@ This scorer is for `talktrack-agent` smart Agent / smart-node work. It is not a 
 ## Required Inputs
 
 - Target `ivrId`.
-- API base, usually `https://ai.sd6g.com:1904/api/web`.
-- Token source, preferably Obsidian `secretStorage`, loaded only into the current process environment.
+- Resolved API base. Domestic is `https://ai.sd6g.com:1904/api/web`; overseas is `https://ai.tbot360.com/api/web`.
+- Token source, usually a temporary token pasted by the user. Obsidian `secretStorage` is only an internal fallback. Normalize pasted token shapes, then validate with `token: Bearer <TOKEN>`.
 - Optional approved source prompt path. If present, use it for prompt length / hash comparison; if absent, score readback integrity from backend consistency only.
 
 ## Recommended Read APIs
