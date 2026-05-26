@@ -227,6 +227,7 @@ Enforce these checks against both the prompt and IVR graph:
 - `intent` means the current AI reply's matched flow node or hangup node, not the customer's overall profile or whole-call final evaluation.
 - Non-hangup nodes must output the current node ID, for example `stage_1_opening` or `objection_reject`.
 - Hangup nodes must output only one of: `高意向成交类`, `待跟进留存类`, `无意向终止类`, `异常场景应急类`.
+- `兜底` is not an intent. A fallback/default port may exist in the graph, but prompts, examples, candidate labels, and model output must not use `{"intent":"兜底"}` to jump.
 - Do not let earlier customer state lock later intent. The final output follows the current SOP branch and current node mapping.
 - Output format must be `回复内容{"intent":"当前意图"}` with JSON directly at the end and no extra explanation.
 - If the smart Agent itself is the final speaker, hangup replies must include `再见` and finish the closing sentence before the hangup action.
@@ -281,6 +282,7 @@ Check:
 - Prompt length/hash matches the exact prompt variant written: raw if under 10,000 characters, compacted only when required.
 - Prompt matches in backend node, frontend node, and graph custom data.
 - For intent-enabled prompts, the imported prompt still follows `intent-usage-rules.md`.
+- The prompt does not tell the Agent to output `{"intent":"兜底"}` and does not list `兜底` as a candidate business intent.
 - The prompt's four hangup labels match IVR smart-node ports and map to `type=2`, `nextType=2`, `actionName=挂机` terminal nodes.
 - Non-hangup intent examples in the prompt are node IDs rather than terminal labels.
 - Terminal intent examples do not duplicate downstream terminal-node closing text. If downstream nodes speak the closing, smart-Agent terminal examples are short acknowledgements only.

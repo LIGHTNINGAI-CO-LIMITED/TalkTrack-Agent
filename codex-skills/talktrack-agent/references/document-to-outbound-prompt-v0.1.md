@@ -170,6 +170,7 @@ Before calling the prompt package ready:
 - Is the call goal explicit?
 - Does the prompt tell the Agent what to do when the user interrupts, refuses, asks for details, or wants a human?
 - If intent JSON is required, does it follow `intent-usage-rules.md`?
+- Does the prompt avoid treating `兜底` as an output intent? It may describe system fallback behavior, but it must not include `{"intent":"兜底"}` or "无法判断时输出兜底".
 - If information collection is required, does it use standard `{collectParam}` once unless custom inline `param` JSON is explicitly needed?
 - Are dialogue fields precise, evidence-based, and privacy-minimized?
 - If terminal intents map to downstream hangup / end nodes, are terminal examples short acknowledgements instead of full closing copy?

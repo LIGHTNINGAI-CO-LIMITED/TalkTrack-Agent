@@ -1,6 +1,6 @@
 ---
 name: talktrack-agent
-version: v0.1.18
+version: v0.1.19
 github_repo: LIGHTNINGAI-CO-LIMITED/TalkTrack-Agent
 github_path: codex-skills/talktrack-agent
 github_branch: main
@@ -78,6 +78,7 @@ If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, p
 - Keep raw JSON, full backend snapshots, and large exported artifacts under `D:\闪电智能\tmp`; write durable reports and SOP summaries to the formal Obsidian vault when the user asks for an artifact.
 - On Windows, do not use Windows PowerShell 5 for Chinese JSON write requests or inline Chinese payloads; use a UTF-8 Python script or UTF-8 files. PowerShell 5 may mojibake Chinese names/prompts.
 - When configuring, checking, or importing a prompt that contains `intent`, read `references/intent-usage-rules.md` first and enforce it against the prompt plus IVR ports/mappings.
+- `兜底` is not a business intent and must never be emitted as `{"intent":"兜底"}` or used as a candidate model intent label. A graph may contain a fallback/default port, but it is only the system route after no explicit intent is matched. If the user's meaning is unclear, the smart Agent should clarify, continue the current SOP safely, or use a valid mapped node / allowed terminal intent; it must not actively jump by outputting `兜底`.
 - Enforce terminal-closing ownership. If a smart Agent terminal `intent` maps to a later hangup / end node, the Agent must only say a short acknowledgement plus `{"intent":"..."}`; the formal closing sentence, goodbye, handoff promise, and repeated business details belong to the downstream terminal node. Only let the Agent speak the full closing when there is no downstream terminal node that will speak it.
 - For smart information collection, prefer the standard configuration: enable the front-page `智能信息采集` switch by setting `llmNodeCollectParamEnabled=1`, define dialogue fields in `llmNodeCollectParamList` with precise descriptions, and insert `{collectParam}` once in the prompt. Use custom inline `param` JSON only when the user explicitly needs full prompt-level control or when the backend workflow requires it. Do not confuse this with the lower `信息采集` switch (`infoCollectEnabled` / `infoCollectConfigList`), which is a separate page section.
 - Smart information collection has a dialogue-variable-library gate. Before writing `llmNodeCollectParamList`, confirm every collection field exists in `变量管理 -> 对话字段`; if a field is missing, create it through the variable-management page/API, re-read the variable list, and use the returned real positive field ID in backend node, frontend node, and graph `customData`. Never invent IDs, never use negative temporary IDs such as `-990101`, and never rely on a canvas-only `name` / `desc` pair. A field that saves in the graph but is absent from `变量管理 -> 对话字段` is P0 invalid because `通话详情 -> 对话字段` will not receive usable data.
@@ -104,7 +105,7 @@ If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, p
    - `POST /ivr/findPage` with `{"query":{"searchName":""},"page":{"current":1,"size":10}}`
 5. Create IVR with `/ivr/insert`, or read the target IVR if updating.
 6. For smart Agent nodes, clone a known-good scene graph shape from an existing IVR, then replace only business fields.
-7. If the prompt contains `intent`, read `references/intent-usage-rules.md`; verify non-hangup intents use current node IDs, hangup intents are exactly the four allowed terminal labels, and labels match IVR ports.
+7. If the prompt contains `intent`, read `references/intent-usage-rules.md`; verify non-hangup intents use current node IDs, hangup intents are exactly the four allowed terminal labels, labels match IVR ports, and neither prompt examples nor candidate intent lists output `兜底` as an intent.
 8. If the task involves lead qualification, customer identity, appointment, company, budget, service choice, or other structured follow-up data, read `references/smart-information-collection-v0.1.md`, infer collection fields from the scene, and add `{collectParam}` exactly once to the prompt package. The field list must be generated from the current scene, not copied from a fixed template. If backend writes are authorized, first create/select the approved fields in `变量管理 -> 对话字段`, re-read the variable list, then enable the front-page 智能信息采集 switch (`llmNodeCollectParamEnabled=1`) and configure `llmNodeCollectParamList` with the real positive IDs returned by the variable list.
 9. Import prompt Markdown as UTF-8. If the prompt is under 10,000 characters, write it unchanged; only compact when it is 10,000+ characters or a readback-verified write fails with `话术场景信息异常`.
 10. Verify with `/ivr/findSceneList/{ivrId}` and run canvas-save validation: open `/script-graph?ivrId=<ivrId>` and confirm the page can save/update, or document why only simulated page-save validation was possible.
@@ -123,7 +124,7 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 - `prompt-import`: import a Markdown prompt into an existing smart node and validate prompt readback. Requires explicit write authorization.
 - `readonly-audit`: inspect existing IVR / smart-node configuration without backend writes.
 - `smart-agent-score`: run the smart-Agent read-only audit scorer and produce P0 / P1 / P2 findings plus next-step recommendations.
-- `intent-port-check`: verify intent labels, graph ports, terminal nodes, and backend / frontend / graph consistency.
+- `intent-port-check`: verify intent labels, graph ports, terminal nodes, and backend / frontend / graph consistency; confirm `兜底` appears only as a system fallback/default port when present, never as a prompt-emitted intent.
 - `terminal-hangup-check`: verify hangup / terminal intent labels follow the four-label rule in `intent-usage-rules.md`.
 - `terminal-closing-overlap-check`: verify terminal intent examples in the prompt do not duplicate downstream hangup / end-node closing copy.
 - `llm-config-check`: verify `llmNodeModelConfig` exists and is consistent across backend, frontend, and graph custom data.

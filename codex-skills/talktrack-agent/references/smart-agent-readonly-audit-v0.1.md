@@ -123,6 +123,7 @@ If the prompt or node uses `{"intent":"..."}`, load `intent-usage-rules.md` and 
 
 - Non-hangup intents use current node IDs or approved business node labels, not stale terminal labels.
 - Hangup / terminal intents use exactly the four allowed terminal labels from `intent-usage-rules.md`.
+- `兜底` is not used as a prompt-emitted intent or model candidate. It may appear only as a graph fallback/default route.
 - Smart node `llmNodeIntentList`, `llmNodeIntentMappingList`, frontend `intentList`, graph ports, and terminal nodes agree.
 - Terminal mappings point to `type=2`, `nextType=2`, hangup-style terminal nodes when the business meaning is hangup.
 - Terminal intent examples in the prompt follow terminal-closing ownership. If an intent maps to a downstream hangup / end node that will speak again, the prompt example must be a short acknowledgement only.
@@ -132,6 +133,7 @@ If the prompt or node uses `{"intent":"..."}`, load `intent-usage-rules.md` and 
 Typical deductions:
 
 - P0-sized: terminal / hangup semantics are broken or map to missing targets.
+- P0-sized: prompt or model config actively outputs `{"intent":"兜底"}` and routes the call by that label.
 - P1-sized: prompt intent labels and graph ports disagree, or smart-Agent terminal examples duplicate downstream terminal-node closing copy.
 - P2-sized: label naming is confusing but mapped correctly.
 
