@@ -83,8 +83,11 @@ Typical deductions:
 Check across backend node, frontend node, and graph custom data:
 
 - `llmNodeModelConfig` exists.
-- Model ID is present and defaults to the expected smart-Agent model: `闪电26BMoE-fast` / `llmNodeModelConfig.id=55`.
+- Model ID is present and matches the resolved backend:
+  - domestic `ai.sd6g.com:1904`: `闪电26BMoE-fast` / `llmNodeModelConfig.id=55`
+  - overseas `ai.tbot360.com`: `openai/gpt-5.4-mini` / `llmNodeModelConfig.id=62`
 - If another model is present, for example `a-qwen3.5-122b-a10b` / `id=41`, require explicit user approval or mark it as a configuration issue.
+- If the smart node also exposes large-model intent recognition 2.0 config, its model fields must match the same regional expectation: domestic `55`, overseas `62`. Check `modelIntentRecognitionConfig.modelId`, `modelIntentRecognitionConfig.id`, and `modelIntentRecognitionConfig.modelConfig.id` when present.
 - `prompt` is non-empty.
 - Timeout / max speak round fields are present when exposed.
 - `enableThinking` / `enable_thinking` is explicit when exposed.
@@ -94,7 +97,7 @@ Typical deductions:
 
 - P0-sized: missing model config or empty prompt on the active smart node.
 - P1-sized: model ID, timeout, thinking flag, or prompt differs across surfaces.
-- P1-sized by default: model ID is not `55` and there is no explicit user-approved exception.
+- P1-sized by default: model ID does not match the resolved backend expectation and there is no explicit user-approved exception.
 - P2-sized: optional model metadata missing but behavior appears safe.
 
 ### 3. Prompt Readback Integrity: 20
