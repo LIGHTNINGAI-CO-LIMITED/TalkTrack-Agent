@@ -75,7 +75,7 @@ python scripts/create_doushen_real_prompt_ivr.py --token <TOKEN_OR_CURL_FRAGMENT
 
 The script resolves domestic/overseas from the token or optional `--backend-url`, then uses Python `requests` and UTF-8 file reads/writes to avoid Windows PowerShell 5 Chinese encoding problems. It applies the raw-prompt policy automatically: prompts under 10,000 characters are written unchanged; compacted prompt is used only when the raw prompt is 10,000+ characters or a raw write fails and a compact fallback is required.
 
-Read its JSON output before reporting success. Key fields are `backendRegion`, `apiBase`, `expectedModelId`, `modelIntentRecognition20ExpectedModelId`, `promptStrategy`, `promptWrittenChars`, `promptCompactedChars`, `promptSha256`, `backendPromptMatches`, `frontendPromptMatches`, `graphPromptMatches`, `portLabels`, and `terminalNodes`.
+Read its JSON output before reporting success. Key fields are `backendRegion`, `apiBase`, `expectedModelId`, `promptStrategy`, `promptWrittenChars`, `promptCompactedChars`, `promptSha256`, `backendPromptMatches`, `frontendPromptMatches`, `graphPromptMatches`, `portLabels`, and `terminalNodes`.
 
 ## Task Mode Routing
 
@@ -205,12 +205,11 @@ Smart Agent node:
 
 Model rule:
 
-- Required model is region-aware after backend resolution.
-- Domestic backend `ai.sd6g.com:1904`: use `闪电26BMoE-fast` / `id=55`.
-- Overseas / international backend `ai.tbot360.com`: use `openai/gpt-5.4-mini` / `id=62`.
-- Apply this to `llmNodeModelConfig.id`. If the smart node also exposes large-model intent recognition 2.0 config, apply the same regional expectation to existing `modelIntentRecognitionConfig.modelId`, `modelIntentRecognitionConfig.id`, or `modelIntentRecognitionConfig.modelConfig.id`.
-- Do not inherit a template's previous model. In particular, `a-qwen3.5-122b-a10b` is `id=41`; domestic must replace it with `55`, and overseas must replace it with `62`, unless the user explicitly approves an exception.
-- Force the expected regional ID in backend node, frontend node, and graph `customData`, then read back all three copies.
+- Default and required smart-Agent model: `闪电26BMoE-fast`.
+- Backend model ID: `llmNodeModelConfig.id=55`.
+- Do not inherit a template's previous model. In particular, `a-qwen3.5-122b-a10b` is `id=41` and must be replaced with `id=55` unless the user explicitly approves an exception.
+- Force `id=55` in backend node, frontend node, and graph `customData`, then read back all three copies.
+- The overseas traditional-talktrack large-model intent recognition 2.0 model rule (`id=62` / `openai/gpt-5.4-mini`) belongs to `talktrack-master`; do not apply it to smart-Agent `llmNodeModelConfig`.
 
 Keep these synchronized:
 
@@ -282,8 +281,7 @@ Check:
 - Scene name is expected.
 - Smart node has `type=4`.
 - Node is start node if intended.
-- `llmNodeModelConfig.id` in backend node, frontend node, and graph `customData` matches the resolved backend: domestic `55` / `闪电26BMoE-fast`, overseas `62` / `openai/gpt-5.4-mini`.
-- If existing smart-node large-model intent recognition 2.0 config is present, its model field also matches the resolved backend: domestic `55`, overseas `62`.
+- `llmNodeModelConfig.id=55` in backend node, frontend node, and graph `customData`; the expected model is `闪电26BMoE-fast`.
 - Prompt length/hash matches the exact prompt variant written: raw if under 10,000 characters, compacted only when required.
 - Prompt matches in backend node, frontend node, and graph custom data.
 - For intent-enabled prompts, the imported prompt still follows `intent-usage-rules.md`.

@@ -1,6 +1,6 @@
 ---
 name: talktrack-agent
-version: v0.1.21
+version: v0.1.22
 github_repo: LIGHTNINGAI-CO-LIMITED/TalkTrack-Agent
 github_path: codex-skills/talktrack-agent
 github_branch: main
@@ -75,7 +75,7 @@ If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, p
 - For write operations, create or use a test/new IVR unless the user explicitly asks to modify an existing production IVR.
 - For `updateSceneList`, snapshot existing config first and verify by reading it back.
 - After any backend write that changes `sceneListFrontend`, graph `customData`, smart-node prompt, routing intents, model config, or smart information collection fields, run canvas-save validation before declaring success. From the user's perspective, the IVR must open at `/script-graph?ivrId=<ivrId>` and the page must be able to save/update without frontend route/config corruption. If a real browser save click is unavailable, simulate the page-save shape as far as possible, verify the fields the page will read are present, and state the limitation in the report. API readback alone is not enough for graph-affecting writes.
-- For smart Agent large-model parameters, choose the required model by resolved backend region. Domestic stays on `闪电26BMoE-fast` / `id=55`. Overseas / international `ai.tbot360.com` must use `openai/gpt-5.4-mini` / `id=62`. This applies to `llmNodeModelConfig` and any smart-node large-model intent recognition 2.0 config exposed as `modelIntentRecognitionConfig` / `modelId` / `modelConfig.id`. Do not inherit template models such as `a-qwen3.5-122b-a10b` (`id=41`), do not copy domestic `55` into overseas 2.0, and do not copy overseas `62` into domestic. Force the expected regional ID in backend node, frontend node, and graph `customData`, then read back all three copies.
+- For smart Agent model parameters, the default and required model remains `闪电26BMoE-fast` with `llmNodeModelConfig.id=55`. Do not inherit a template's old model, including `a-qwen3.5-122b-a10b` (`id=41`). When creating, importing, or updating a smart Agent, force `id=55` in backend node, frontend node, and graph `customData`, then read back all three copies. Do not apply the traditional-talktrack large-model intent recognition 2.0 overseas rule (`id=62` / `openai/gpt-5.4-mini`) to smart Agent `llmNodeModelConfig`; that rule belongs to `talktrack-master`.
 - Keep raw JSON, full backend snapshots, and large exported artifacts under `D:\闪电智能\tmp`; write durable reports and SOP summaries to the formal Obsidian vault when the user asks for an artifact.
 - On Windows, do not use Windows PowerShell 5 for Chinese JSON write requests or inline Chinese payloads; use a UTF-8 Python script or UTF-8 files. PowerShell 5 may mojibake Chinese names/prompts.
 - When configuring, checking, or importing a prompt that contains `intent`, read `references/intent-usage-rules.md` first and enforce it against the prompt plus IVR ports/mappings.
@@ -104,7 +104,7 @@ If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, p
 4. Read base resources:
    - `GET /industry/findList`
    - `GET /ivr/findAllTtsVoiceBaseInfo`
-   - `GET /ivr/findModelList`; confirm the expected regional model exists. Domestic expects `id=55` / `闪电26BMoE-fast`; overseas expects `id=62` / `openai/gpt-5.4-mini` for smart-Agent large-model surfaces and 2.0 configs.
+   - `GET /ivr/findModelList`; confirm `id=55` is `闪电26BMoE-fast`. Traditional-talktrack 2.0 regional model rules are owned by `talktrack-master`, not this smart-Agent skill.
    - `POST /ivr/findPage` with `{"query":{"searchName":""},"page":{"current":1,"size":10}}`
 5. Create IVR with `/ivr/insert`, or read the target IVR if updating.
 6. For smart Agent nodes, clone a known-good scene graph shape from an existing IVR, then replace only business fields.
@@ -137,7 +137,7 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 
 - Use `scripts/check_skill_update.py --check` before starting a task to compare the local skill version with GitHub. The checker prefers `git ls-remote` to read the real remote HEAD SHA, then fetches files by explicit GitHub tree/blob SHA before falling back to Contents API and raw GitHub URLs. It also tries multiple fetch channels: Python `urllib`, `certifi` when installed, `curl.exe`, and PowerShell `WebClient`, so TLS/certificate-chain issues or branch-content cache in one channel do not immediately block the check. Use `--apply` only after the user confirms they want to update the local installed skill.
 - Use `scripts/bootstrap_update_talktrack_agent.ps1` when an old local skill cannot self-update because the old Python-only update checker is blocked by local TLS/certificate-chain issues.
-- Use `scripts/create_doushen_real_prompt_ivr.py` for "create a new IVR from a stable template + import a UTF-8 prompt" tasks when its parameters fit. It validates the token, resolves domestic/overseas, clones the template graph, forces the smart-Agent model by backend region instead of inheriting the template model, writes raw prompts under 10,000 characters unchanged, falls back to compacted prompt only after length/failure, and reports `backendRegion`, expected model IDs, `promptStrategy`, `promptWrittenChars`, hashes, model readback matches, port labels, and terminal nodes.
+- Use `scripts/create_doushen_real_prompt_ivr.py` for "create a new IVR from a stable template + import a UTF-8 prompt" tasks when its parameters fit. It validates the token, resolves domestic/overseas, clones the template graph, forces the smart-Agent model to `闪电26BMoE-fast` (`llmNodeModelConfig.id=55`) instead of inheriting the template model, writes raw prompts under 10,000 characters unchanged, falls back to compacted prompt only after length/failure, and reports `backendRegion`, expected model ID, `promptStrategy`, `promptWrittenChars`, hashes, model readback matches, port labels, and terminal nodes.
 - Run bundled scripts with a token argument only for the current task; do not hardcode real tokens into scripts, docs, commits, or examples.
 
 ## Key API Rules
@@ -161,10 +161,7 @@ Choose one primary mode and keep the run inside that mode unless the user expand
 
 - Smart Agent node type is `type: 4`.
 - Agent model config lives at `llmNodeModelConfig`.
-- Smart Agent and smart-node large-model config expected model is region-aware:
-  - domestic: `闪电26BMoE-fast` (`id=55`)
-  - overseas / international: `openai/gpt-5.4-mini` (`id=62`)
-- Apply the regional model to `llmNodeModelConfig.id`. If a smart node also exposes large-model intent recognition 2.0 config, apply the same regional expectation to `modelIntentRecognitionConfig.modelId`, `modelIntentRecognitionConfig.id`, or `modelIntentRecognitionConfig.modelConfig.id` when those fields exist. Treat template-inherited models such as `a-qwen3.5-122b-a10b` (`id=41`) as configuration bugs unless the user explicitly requests an exception.
+- Smart Agent default model must be `闪电26BMoE-fast` (`llmNodeModelConfig.id=55`). Treat any template-inherited model such as `a-qwen3.5-122b-a10b` (`id=41`) as a configuration bug unless the user explicitly requests an exception. Traditional normal/jump-node large-model intent recognition 2.0 model routing, including overseas `id=62`, is out of this skill's scope and belongs to `talktrack-master`.
 - Front visible `智能信息采集` state lives at `llmNodeCollectParamEnabled` and field list at `llmNodeCollectParamList`. To make the page show `采集`, set and read back `llmNodeCollectParamEnabled=1` in backend, frontend node list, and graph custom data.
 - `llmNodeCollectParamList[].id` must come from `变量管理 -> 对话字段` variable-list readback. Negative IDs, invented IDs, stale template IDs, or name-only fields that do not exist in variable management are invalid even if `/ivr/updateSceneList` accepts the graph JSON.
 - Lower `信息采集` model extraction lives at `infoCollectEnabled` and `infoCollectConfigList`. It can coexist with the front switch, but it does not prove the front visible `智能信息采集` radio is enabled.

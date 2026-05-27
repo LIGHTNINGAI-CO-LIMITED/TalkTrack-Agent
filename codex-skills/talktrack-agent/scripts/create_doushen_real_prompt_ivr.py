@@ -22,14 +22,8 @@ BACKENDS = {
     },
 }
 RAW_PROMPT_CHAR_LIMIT = 10000
-SMART_AGENT_MODEL_BY_REGION = {
-    "domestic": {"id": 55, "name": "闪电26BMoE-fast"},
-    "overseas": {"id": 62, "name": "openai/gpt-5.4-mini"},
-}
-MODEL_INTENT_RECOGNITION_2_0_MODEL_BY_REGION = {
-    "domestic": {"id": 55, "name": "闪电26BMoE-fast"},
-    "overseas": {"id": 62, "name": "openai/gpt-5.4-mini"},
-}
+DEFAULT_SMART_AGENT_MODEL_ID = 55
+DEFAULT_SMART_AGENT_MODEL_NAME = "闪电26BMoE-fast"
 
 
 def extract_access_token(value: str) -> str:
@@ -198,18 +192,6 @@ def normalize_int(value):
         return None
 
 
-def expected_smart_agent_model(region: str) -> dict:
-    if region not in SMART_AGENT_MODEL_BY_REGION:
-        raise RuntimeError(f"Unknown backend region for smart-Agent model policy: {region}")
-    return SMART_AGENT_MODEL_BY_REGION[region]
-
-
-def expected_model_intent_recognition_2_0_model(region: str) -> dict:
-    if region not in MODEL_INTENT_RECOGNITION_2_0_MODEL_BY_REGION:
-        raise RuntimeError(f"Unknown backend region for model-intent 2.0 policy: {region}")
-    return MODEL_INTENT_RECOGNITION_2_0_MODEL_BY_REGION[region]
-
-
 def model_display_name(model: dict) -> str:
     return (
         model.get("modelName")
@@ -220,39 +202,26 @@ def model_display_name(model: dict) -> str:
     )
 
 
-def find_model_name(model_response, expected: dict, label: str) -> str:
+def find_default_model_name(model_response) -> str:
     for model in model_response.get("data") or []:
-        if normalize_int(model.get("id")) == normalize_int(expected["id"]):
+        if normalize_int(model.get("id")) == DEFAULT_SMART_AGENT_MODEL_ID:
             return model_display_name(model)
     raise RuntimeError(
-        f"{label} model missing from catalog: "
-        f"id={expected['id']} name={expected['name']}"
+        f"Default smart-Agent model missing: "
+        f"id={DEFAULT_SMART_AGENT_MODEL_ID} name={DEFAULT_SMART_AGENT_MODEL_NAME}"
     )
 
 
-def normalize_optional_model_intent_recognition(container: dict, expected_model: dict):
-    config = container.get("modelIntentRecognitionConfig")
-    if isinstance(config, dict):
-        if "modelId" in config:
-            config["modelId"] = expected_model["id"]
-        if "id" in config and "modelConfig" not in config:
-            config["id"] = expected_model["id"]
-        model_config = config.get("modelConfig")
-        if isinstance(model_config, dict):
-            model_config["id"] = expected_model["id"]
-
-
-def update_smart_node(node, node_name: str, prompt: str, smart_model: dict, model_intent_model: dict):
+def update_smart_node(node, node_name: str, prompt: str):
     node["name"] = node_name
     config = node.setdefault("llmNodeModelConfig", {})
-    config["id"] = smart_model["id"]
+    config["id"] = DEFAULT_SMART_AGENT_MODEL_ID
     config["prompt"] = prompt
     config["enableThinking"] = 0
     config["enable_thinking"] = 0
-    normalize_optional_model_intent_recognition(node, model_intent_model)
 
 
-def update_smart_cell(cell, node_name: str, prompt: str, description: str, smart_model: dict, model_intent_model: dict):
+def update_smart_cell(cell, node_name: str, prompt: str, description: str):
     data = cell.setdefault("data", {})
     data["label"] = node_name
     data["title"] = node_name
@@ -261,14 +230,13 @@ def update_smart_cell(cell, node_name: str, prompt: str, description: str, smart
     custom = data.setdefault("customData", {})
     custom["name"] = node_name
     config = custom.setdefault("llmNodeModelConfig", {})
-    config["id"] = smart_model["id"]
+    config["id"] = DEFAULT_SMART_AGENT_MODEL_ID
     config["prompt"] = prompt
     config["enableThinking"] = 0
     config["enable_thinking"] = 0
-    normalize_optional_model_intent_recognition(custom, model_intent_model)
 
 
-def apply_prompt(scene_list, scene_front, prompt: str, scene_name: str, node_name: str, smart_model: dict, model_intent_model: dict):
+def apply_prompt(scene_list, scene_front, prompt: str, scene_name: str, node_name: str):
     scene = scene_list[0]
     front_scene = scene_front[0]
     scene["name"] = scene_name
@@ -278,9 +246,9 @@ def apply_prompt(scene_list, scene_front, prompt: str, scene_name: str, node_nam
     frontend_smart = first_smart_node(front_scene["nodeList"])
     smart_cell = first_smart_graph_cell(front_scene["graph"]["cells"])
 
-    update_smart_node(backend_smart, node_name, prompt, smart_model, model_intent_model)
-    update_smart_node(frontend_smart, node_name, prompt, smart_model, model_intent_model)
-    update_smart_cell(smart_cell, node_name, prompt, backend_smart.get("text") or "", smart_model, model_intent_model)
+    update_smart_node(backend_smart, node_name, prompt)
+    update_smart_node(frontend_smart, node_name, prompt)
+    update_smart_cell(smart_cell, node_name, prompt, backend_smart.get("text") or "")
 
 
 def write_scene(client: Client, ivr_id: int, scene_list, scene_front):
@@ -330,16 +298,16 @@ def try_delete(client: Client, ivr_id: int):
     return {"status": "not_confirmed", "last": last}
 
 
-def assert_model_readback(model_ids, expected: dict):
+def assert_model_readback(model_ids):
     bad = {
         key: value
         for key, value in model_ids.items()
-        if normalize_int(value) != normalize_int(expected["id"])
+        if normalize_int(value) != DEFAULT_SMART_AGENT_MODEL_ID
     }
     if bad:
         raise RuntimeError(
             f"smart-Agent model readback mismatch; expected "
-            f"{expected['name']} id={expected['id']}, "
+            f"{DEFAULT_SMART_AGENT_MODEL_NAME} id={DEFAULT_SMART_AGENT_MODEL_ID}, "
             f"got={bad}"
         )
 
@@ -366,10 +334,7 @@ def main():
     Client.assert_ok(client.get("/ivr/findAllTtsVoiceBaseInfo"), "read tts voices")
     model_response = client.get("/ivr/findModelList")
     Client.assert_ok(model_response, "read models")
-    smart_model = expected_smart_agent_model(backend["region"])
-    model_intent_model = expected_model_intent_recognition_2_0_model(backend["region"])
-    smart_model_name = find_model_name(model_response, smart_model, "smart-Agent")
-    model_intent_model_name = find_model_name(model_response, model_intent_model, "large-model intent recognition 2.0")
+    default_model_name = find_default_model_name(model_response)
 
     raw_prompt = prompt_path.read_text(encoding="utf-8")
     compacted_prompt = compact_prompt(raw_prompt)
@@ -407,7 +372,7 @@ def main():
     template_scene_front = parse_json_maybe(template["data"]["sceneListFrontend"])
     scene_list = copy.deepcopy(template_scene_list)
     scene_front = copy.deepcopy(template_scene_front)
-    apply_prompt(scene_list, scene_front, prompt, scene_name, node_name, smart_model, model_intent_model)
+    apply_prompt(scene_list, scene_front, prompt, scene_name, node_name)
 
     update = write_scene(client, new_ivr_id, scene_list, scene_front)
     if str(update.get("code")) != "0" and prompt_strategy == "raw":
@@ -416,7 +381,7 @@ def main():
         prompt = compacted_prompt
         prompt_strategy = "compact_after_raw_write_failure"
         prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-        apply_prompt(scene_list, scene_front, prompt, scene_name, node_name, smart_model, model_intent_model)
+        apply_prompt(scene_list, scene_front, prompt, scene_name, node_name)
         update = write_scene(client, new_ivr_id, scene_list, scene_front)
     Client.assert_ok(update, "write scene list")
 
@@ -441,7 +406,7 @@ def main():
         "frontend": rb_frontend["llmNodeModelConfig"].get("id"),
         "graph": rb_cell["data"]["customData"]["llmNodeModelConfig"].get("id"),
     }
-    assert_model_readback(model_ids, smart_model)
+    assert_model_readback(model_ids)
 
     cleanup = None
     if args.cleanup_ivr_id:
@@ -464,12 +429,9 @@ def main():
         "promptCompactedChars": len(compacted_prompt),
         "promptStrategy": prompt_strategy,
         "promptSha256": prompt_hash,
-        "expectedModelId": smart_model["id"],
-        "expectedModelName": smart_model["name"],
-        "modelNameFromCatalog": smart_model_name,
-        "modelIntentRecognition20ExpectedModelId": model_intent_model["id"],
-        "modelIntentRecognition20ExpectedModelName": model_intent_model["name"],
-        "modelIntentRecognition20ModelNameFromCatalog": model_intent_model_name,
+        "expectedModelId": DEFAULT_SMART_AGENT_MODEL_ID,
+        "expectedModelName": DEFAULT_SMART_AGENT_MODEL_NAME,
+        "modelNameFromCatalog": default_model_name,
         "modelIds": model_ids,
         "modelIdMatches": True,
         "backendPromptMatches": backend_prompt == prompt,
