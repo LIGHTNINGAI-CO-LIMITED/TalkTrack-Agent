@@ -21,7 +21,7 @@ BACKENDS = {
         "apiBase": "https://ai.tbot360.com/api/web",
     },
 }
-RAW_PROMPT_CHAR_LIMIT = 10000
+RAW_PROMPT_CHAR_LIMIT = 14500
 DEFAULT_SMART_AGENT_MODEL_ID = 55
 DEFAULT_SMART_AGENT_MODEL_NAME = "闪电26BMoE-fast"
 

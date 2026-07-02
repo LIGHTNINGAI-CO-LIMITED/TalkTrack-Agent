@@ -106,6 +106,56 @@ Recommended prompt line:
 信息采集：从用户原话和当前对话上下文中提取下方对话字段；仅基于明确证据填写，不确定时留空或写“未提及”。{collectParam}
 ```
 
+### Sequential Qualification Collection Pattern
+
+Use this pattern when the smart Agent's job is not broad sales chat, but ordered qualification or intake collection. Typical examples include loan pre-screening, recruiting intake, appointment qualification, policy confirmation, and any scenario where the field order is part of the business process.
+
+Prompt requirements:
+
+1. State the role boundary: the Agent only performs the approved collection task and does not expand into unrelated business explanation.
+2. Declare the exact field order and keep it stable. The Agent must ask one question at a time, must not reorder fields, and must not skip a field unless the user gives a valid skip answer.
+3. Define a valid answer for each field. A valid answer is either substantive information for the current question or an explicit skip state such as `跳过` / `不想答` / `不清楚`.
+4. Treat interruptions as invalid answers to the current field. User questions, objections, small talk, complaints, asks for explanation, or off-topic answers must be handled briefly, then the Agent returns to the interrupted question.
+5. If the user asks why a field is needed, the Agent gives a short purpose explanation, then repeats or rephrases the current question. Do not mark the field complete from the objection itself.
+6. If the user gives one answer that clearly covers two adjacent fields, the prompt may define a specific skip rule, such as `没房没车` completing both house and car fields. Do not invent broad skip rules.
+7. If the user explicitly skips a field, record the approved skip value and advance. Do not repeatedly pursue that same field.
+8. Terminal success / failure criteria must be explicit. For example, success may require all fields, or enough fields for downstream screening; failure may require repeated refusal, complaint, or consecutive silence.
+
+Field description requirements:
+
+```text
+字段名：<field name>
+字段描述：对应第 <n> 题；仅当用户对当前问题给出 <accepted evidence> 时填写；用户明确跳过 / 不想答 / 不清楚时填写 <skip convention>；未问到或仅有打断/反问/闲聊/解释请求时留空或写“未提及”；不得根据语气、年龄、姓名、职业或上下文自行推测。默认值：<是否允许默认值和条件>。
+```
+
+Default values are allowed only when the business prompt explicitly defines them. For example, a consent field may default to `同意` only if the source prompt says unasked or unanswered consent should be treated that way. Sensitive fields, contact fields, identity fields, income, assets, credit, gender, or risk status must not get defaults unless the user explicitly approved that convention.
+
+Output structure:
+
+- Standard mode remains preferred: configure `llmNodeCollectParamList`, insert `{collectParam}` once, and let the platform populate the dialogue-field extraction list.
+- If the prompt must control inline values, use natural reply plus one JSON object in the same turn. Do not output Markdown, labels, tables, analysis, or multiple alternatives.
+- Terminal examples:
+
+```text
+好的，那我先不打扰您了。{"intent":"采集失败"}
+这边已经做好登记了，后续工作人员会再联系您。{"intent":"采集成功"}
+```
+
+- Inline `param` example, only when custom output control is explicitly required:
+
+```text
+好的，我记下了。{"intent":"问询中","param":[{"name":"所在城市","value":"深圳"}]}
+```
+
+Hard acceptance checks:
+
+- The prompt contains a fixed field order when the business process needs one.
+- The prompt says one turn asks only one collection question.
+- The prompt says interruption / objection / explanation request does not complete the current field.
+- The prompt says explicit skip values advance without repeated pursuit.
+- Terminal JSON, if present, uses valid business intents such as `采集成功` / `采集失败`, not `兜底`.
+- Inline `param`, if present, uses field names that exactly match configured dialogue fields.
+
 ### Mode 2: Custom Prompt / Inline Param JSON
 
 Use only when the user explicitly wants full prompt control or the backend workflow requires the Agent to output collected fields inline.

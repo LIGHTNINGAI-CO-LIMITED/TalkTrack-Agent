@@ -73,7 +73,7 @@ For "create a new IVR from a stable template + import prompt Markdown" tasks, pr
 python scripts/create_doushen_real_prompt_ivr.py --token <TOKEN_OR_CURL_FRAGMENT> --backend-region auto --prompt-path <UTF8_MD> --template-ivr-id 3449
 ```
 
-The script resolves domestic/overseas from the token or optional `--backend-url`, then uses Python `requests` and UTF-8 file reads/writes to avoid Windows PowerShell 5 Chinese encoding problems. It applies the raw-prompt policy automatically: prompts under 10,000 characters are written unchanged; compacted prompt is used only when the raw prompt is 10,000+ characters or a raw write fails and a compact fallback is required.
+The script resolves domestic/overseas from the token or optional `--backend-url`, then uses Python `requests` and UTF-8 file reads/writes to avoid Windows PowerShell 5 Chinese encoding problems. It applies the raw-prompt policy automatically: prompts under 14,500 characters are written unchanged; compacted prompt is used only when the raw prompt is 14,500+ characters or a raw write fails and a compact fallback is required. Older 10,000-character prompt guidance is obsolete.
 
 Read its JSON output before reporting success. Key fields are `backendRegion`, `apiBase`, `expectedModelId`, `promptStrategy`, `promptWrittenChars`, `promptCompactedChars`, `promptSha256`, `backendPromptMatches`, `frontendPromptMatches`, `graphPromptMatches`, `portLabels`, and `terminalNodes`.
 
@@ -253,9 +253,9 @@ For any intent-enabled prompt, load `intent-usage-rules.md` before import and pr
 
 Do not compact by default. Count the raw prompt characters first:
 
-- If the raw prompt is under 10,000 characters, write the prompt unchanged.
-- If the raw prompt is 10,000+ characters, compact whitespace before writing.
-- If an under-10,000 raw prompt still fails with `话术场景信息异常`, test whether a short prompt saves; if short prompt saves, compact and retry.
+- If the raw prompt is under 14,500 characters, write the prompt unchanged.
+- If the raw prompt is 14,500+ characters, compact whitespace before writing.
+- If an under-14,500 raw prompt still fails with `话术场景信息异常`, test whether a short prompt saves; if short prompt saves, compact and retry.
 
 Compaction rules:
 
@@ -282,7 +282,7 @@ Check:
 - Smart node has `type=4`.
 - Node is start node if intended.
 - `llmNodeModelConfig.id=55` in backend node, frontend node, and graph `customData`; the expected model is `闪电26BMoE-fast`.
-- Prompt length/hash matches the exact prompt variant written: raw if under 10,000 characters, compacted only when required.
+- Prompt length/hash matches the exact prompt variant written: raw if under 14,500 characters, compacted only when required.
 - Prompt matches in backend node, frontend node, and graph custom data.
 - For intent-enabled prompts, the imported prompt still follows `intent-usage-rules.md`.
 - The prompt does not tell the Agent to output `{"intent":"兜底"}` and does not list `兜底` as a candidate business intent.
