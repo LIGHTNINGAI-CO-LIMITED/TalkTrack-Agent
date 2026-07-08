@@ -221,6 +221,12 @@ Keep these synchronized:
   - `data.title`
   - `data.description`
 
+For intent-enabled nodes, do not confuse backend route shape with frontend canvas option shape:
+
+- Backend route rows may use `{"27620":"node-xxx"}`.
+- Frontend `sceneListFrontend.nodeList[].intentList` and graph `data.customData.intentList` must use `{"value":"27620","label":"客户肯定/默认","digitSequence":""}`.
+- If a frontend row is a single-key backend route dictionary, treat it as a P0 save-safety failure. The page save code reads `value`; bad rows can trigger generic `system error`.
+
 ## Intent Usage Rules
 
 When the prompt contains `{"intent":"..."}`, intent tables, terminal intents, or hangup intents, read `intent-usage-rules.md` before writing or validating the prompt.
@@ -293,6 +299,7 @@ Check:
 - If 智能信息采集 is enabled, every field referenced by `llmNodeCollectParamList` exists in `变量管理 -> 对话字段`, and every `llmNodeCollectParamList[].id` is the real positive ID returned by the variable list.
 - No negative temporary IDs, guessed IDs, stale template IDs, or canvas-only field definitions are present in collection config.
 - Dialogue-field descriptions are evidence-based and privacy-minimized.
+- Frontend `sceneListFrontend.nodeList[].intentList` and graph `customData.intentList` rows, when present, all have `value`, `label`, and `digitSequence`; no frontend row uses backend route format such as `{"27620":"node-xxx"}`.
 
 ## Canvas-Save Validation
 
@@ -304,7 +311,7 @@ Required checks:
 - Refresh any already-open old tab before saving; stale page memory can overwrite repaired canvas data.
 - Confirm the smart Agent drawer opens and the intended prompt, model, intent ports, and information-collection fields are visible.
 - Confirm the page can save/update successfully from the canvas view.
-- If a real browser save click is unavailable, simulate the page-save shape as far as possible, verify the fields the page reads are present, and state this limitation in the report.
+- If a real browser save click is unavailable, simulate the page-save shape as far as possible: frontend `intentList` rows must have `value`, `label`, and `digitSequence`; graph ports and mapped intents must still agree; no frontend row may be a backend route dictionary. State this limitation in the report.
 
 API readback alone is not enough for graph-affecting writes because the page may rebuild routes or collection fields from frontend canvas data.
 

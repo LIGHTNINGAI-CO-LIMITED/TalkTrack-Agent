@@ -192,6 +192,54 @@ def normalize_int(value):
         return None
 
 
+def looks_like_backend_route_row(row):
+    if not isinstance(row, dict):
+        return False
+    if any(key in row for key in ("value", "label", "digitSequence")):
+        return False
+    if len(row) != 1:
+        return False
+    key = next(iter(row.keys()))
+    value = row.get(key)
+    return bool(re.fullmatch(r"-?\d+", str(key))) and (value == "" or isinstance(value, str))
+
+
+def frontend_intent_list_issues(container, path: str):
+    rows = container.get("intentList") if isinstance(container, dict) else None
+    if rows is None:
+        return []
+    if not isinstance(rows, list):
+        return [f"{path}.intentList is {type(rows).__name__}, expected list"]
+
+    issues = []
+    for index, row in enumerate(rows):
+        row_path = f"{path}.intentList[{index}]"
+        if not isinstance(row, dict):
+            issues.append(f"{row_path} is {type(row).__name__}, expected object")
+            continue
+        if looks_like_backend_route_row(row):
+            issues.append(f"{row_path} uses backend route format; frontend requires value/label/digitSequence")
+            continue
+        for key in ("value", "label", "digitSequence"):
+            if key not in row:
+                issues.append(f"{row_path} missing {key}")
+    return issues
+
+
+def validate_frontend_intent_lists(scene_front, phase: str):
+    issues = []
+    for scene_index, scene in enumerate(scene_front or []):
+        for node_index, node in enumerate(scene.get("nodeList") or []):
+            node_name = node.get("name") or node.get("id") or node_index
+            issues.extend(frontend_intent_list_issues(node, f"{phase}.scene[{scene_index}].node[{node_name}]"))
+        for cell in (scene.get("graph") or {}).get("cells") or []:
+            custom = (cell.get("data") or {}).get("customData") or {}
+            cell_name = custom.get("name") or cell.get("id") or "unknown"
+            issues.extend(frontend_intent_list_issues(custom, f"{phase}.scene[{scene_index}].graphCell[{cell_name}].customData"))
+    if issues:
+        raise RuntimeError("frontend intentList save-safety invalid: " + "; ".join(issues[:12]))
+
+
 def model_display_name(model: dict) -> str:
     return (
         model.get("modelName")
@@ -252,6 +300,7 @@ def apply_prompt(scene_list, scene_front, prompt: str, scene_name: str, node_nam
 
 
 def write_scene(client: Client, ivr_id: int, scene_list, scene_front):
+    validate_frontend_intent_lists(scene_front, "pre_write")
     return client.post(
         "/ivr/updateSceneList",
         {
@@ -392,6 +441,7 @@ def main():
 
     rb_scene_list = parse_json_maybe(readback["data"]["sceneList"])
     rb_front = parse_json_maybe(readback["data"]["sceneListFrontend"])
+    validate_frontend_intent_lists(rb_front, "readback")
     rb_scene = rb_scene_list[0]
     rb_front_scene = rb_front[0]
     rb_backend = first_smart_node(rb_scene["nodeList"])
@@ -434,6 +484,7 @@ def main():
         "modelNameFromCatalog": default_model_name,
         "modelIds": model_ids,
         "modelIdMatches": True,
+        "frontendIntentListSaveSafe": True,
         "backendPromptMatches": backend_prompt == prompt,
         "frontendPromptMatches": frontend_prompt == prompt,
         "graphPromptMatches": graph_prompt == prompt,

@@ -1,6 +1,6 @@
 ---
 name: talktrack-agent
-version: v0.1.23
+version: v0.1.24
 github_repo: LIGHTNINGAI-CO-LIMITED/TalkTrack-Agent
 github_path: codex-skills/talktrack-agent
 github_branch: main
@@ -75,6 +75,7 @@ If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, p
 - For write operations, create or use a test/new IVR unless the user explicitly asks to modify an existing production IVR.
 - For `updateSceneList`, snapshot existing config first and verify by reading it back.
 - After any backend write that changes `sceneListFrontend`, graph `customData`, smart-node prompt, routing intents, model config, or smart information collection fields, run canvas-save validation before declaring success. From the user's perspective, the IVR must open at `/script-graph?ivrId=<ivrId>` and the page must be able to save/update without frontend route/config corruption. If a real browser save click is unavailable, simulate the page-save shape as far as possible, verify the fields the page will read are present, and state the limitation in the report. API readback alone is not enough for graph-affecting writes.
+- Keep backend route lists and frontend canvas intent lists in their own shapes. Backend `sceneList.nodeList[].intentList` may use route dictionaries such as `{"27620":"node-xxx"}` / `{"-1":"node-yyy"}`. Frontend `sceneListFrontend.nodeList[].intentList` and graph `data.customData.intentList` must use page-save option rows with `value`, `label`, and `digitSequence`, for example `{"value":"27620","label":"客户肯定/默认","digitSequence":""}`. Any frontend row shaped like `{"27620":"node-xxx"}` is a P0 save-safety failure because the page save logic reads `value` and may return generic `system error`.
 - For smart Agent model parameters, the default and required model remains `闪电26BMoE-fast` with `llmNodeModelConfig.id=55`. Do not inherit a template's old model, including `a-qwen3.5-122b-a10b` (`id=41`). When creating, importing, or updating a smart Agent, force `id=55` in backend node, frontend node, and graph `customData`, then read back all three copies. Do not apply the traditional-talktrack large-model intent recognition 2.0 overseas rule (`id=62` / `openai/gpt-5.4-mini`) to smart Agent `llmNodeModelConfig`; that rule belongs to `talktrack-master`.
 - Keep raw JSON, full backend snapshots, and large exported artifacts under `D:\闪电智能\tmp`; write durable reports and SOP summaries to the formal Obsidian vault when the user asks for an artifact.
 - On Windows, do not use Windows PowerShell 5 for Chinese JSON write requests or inline Chinese payloads; use a UTF-8 Python script or UTF-8 files. PowerShell 5 may mojibake Chinese names/prompts.
@@ -113,7 +114,7 @@ If the local old version does not have `bootstrap_update_talktrack_agent.ps1`, p
 7. If the prompt contains `intent`, read `references/intent-usage-rules.md`; verify non-hangup intents use current node IDs, hangup intents are exactly the four allowed terminal labels, labels match IVR ports, and neither prompt examples nor candidate intent lists output `兜底` as an intent.
 8. If the task involves lead qualification, customer identity, appointment, company, budget, service choice, or other structured follow-up data, read `references/smart-information-collection-v0.1.md`, infer collection fields from the scene, and add `{collectParam}` exactly once to the prompt package. The field list must be generated from the current scene, not copied from a fixed template. If backend writes are authorized, first create/select the approved fields in `变量管理 -> 对话字段`, re-read the variable list, then enable the front-page 智能信息采集 switch (`llmNodeCollectParamEnabled=1`) and configure `llmNodeCollectParamList` with the real positive IDs returned by the variable list.
 9. Import prompt Markdown as UTF-8. If the prompt is under 14,500 characters, write it unchanged; only compact when it is 14,500+ characters or a readback-verified write fails with `话术场景信息异常`. Treat older 10,000-character guidance as obsolete.
-10. Verify with `/ivr/findSceneList/{ivrId}` and run canvas-save validation: open `/script-graph?ivrId=<ivrId>` and confirm the page can save/update, or document why only simulated page-save validation was possible.
+10. Verify with `/ivr/findSceneList/{ivrId}` and run canvas-save validation: open `/script-graph?ivrId=<ivrId>` and confirm the page can save/update, or document why only simulated page-save validation was possible. Simulated validation must reject any frontend `sceneListFrontend.nodeList[].intentList` or graph `customData.intentList` row that lacks `value`, `label`, or `digitSequence`, or that uses backend route format such as `{"27620":"node-xxx"}`.
 11. Delete temporary token files or auth dumps.
 
 ## Task Modes
@@ -175,6 +176,7 @@ Choose one primary mode and keep the run inside that mode unless the user expand
   - `sceneList[0].nodeList[0]`
   - `sceneListFrontend[0].nodeList[0]`
   - `sceneListFrontend[0].graph.cells[0].data.customData`
+- For any intent-enabled smart node, keep frontend intent rows save-safe in both `sceneListFrontend.nodeList` and graph `customData`: every row must have `value`, `label`, and `digitSequence`; backend route dictionaries must not be copied into frontend `intentList`.
 
 ## References
 
