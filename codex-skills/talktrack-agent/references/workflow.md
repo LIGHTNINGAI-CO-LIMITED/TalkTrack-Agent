@@ -227,6 +227,31 @@ For intent-enabled nodes, do not confuse backend route shape with frontend canva
 - Frontend `sceneListFrontend.nodeList[].intentList` and graph `data.customData.intentList` must use `{"value":"27620","label":"客户肯定/默认","digitSequence":""}`.
 - If a frontend row is a single-key backend route dictionary, treat it as a P0 save-safety failure. The page save code reads `value`; bad rows can trigger generic `system error`.
 
+### Current-IVR Intent Ownership Gate
+
+Correct shape does not prove correct ownership. Before any `updateSceneList`, copy, import, or repair, read:
+
+```http
+GET /ivrIntent/findList/{ivrId}
+```
+
+Use the response as the authoritative set of positive numeric intent IDs for that exact IVR. Validate all of these surfaces:
+
+- backend `sceneList.nodeList[].intentList` dictionary keys
+- frontend `sceneListFrontend.nodeList[].intentList[].value`
+- graph `data.customData.intentList[].value`
+- positive numeric values in `interruptedIntentList` or equivalent interrupted-intent rows
+
+`-1` and `-2` are reserved system routes and do not need to appear in the positive intent catalog. Every positive numeric reference must appear in the current IVR catalog. A foreign or stale ID is P0 even when the JSON shape is valid and the target node exists: runtime may fail during keyword intent prediction before the large model or TTS is called, and IVR copy may fail while building the source-to-target ID map.
+
+For copy/template flows:
+
+1. Read and validate the source IVR intent catalog before copying.
+2. Create or resolve the target IVR and read its own intent catalog.
+3. Map each source positive intent ID to its source intent name, then to one unique target ID with the exact same name.
+4. Apply the mapping consistently to backend routes, frontend option values, graph custom data, and interrupted-intent rows.
+5. If the source ID has no source record, or the target has zero/multiple exact-name matches, stop. Do not guess, reuse the source ID, delete the branch, or call `updateSceneList`.
+
 ## Intent Usage Rules
 
 When the prompt contains `{"intent":"..."}`, intent tables, terminal intents, or hangup intents, read `intent-usage-rules.md` before writing or validating the prompt.
@@ -300,6 +325,8 @@ Check:
 - No negative temporary IDs, guessed IDs, stale template IDs, or canvas-only field definitions are present in collection config.
 - Dialogue-field descriptions are evidence-based and privacy-minimized.
 - Frontend `sceneListFrontend.nodeList[].intentList` and graph `customData.intentList` rows, when present, all have `value`, `label`, and `digitSequence`; no frontend row uses backend route format such as `{"27620":"node-xxx"}`.
+- Every positive numeric intent reference in backend, frontend, graph custom data, and interrupted-intent rows belongs to the exact target IVR returned by `/ivrIntent/findList/{ivrId}`.
+- Copy/template operations remap positive intent IDs by exact intent name; no source-IVR positive ID survives unless it independently equals the uniquely resolved target ID.
 
 ## Canvas-Save Validation
 
@@ -312,6 +339,7 @@ Required checks:
 - Confirm the smart Agent drawer opens and the intended prompt, model, intent ports, and information-collection fields are visible.
 - Confirm the page can save/update successfully from the canvas view.
 - If a real browser save click is unavailable, simulate the page-save shape as far as possible: frontend `intentList` rows must have `value`, `label`, and `digitSequence`; graph ports and mapped intents must still agree; no frontend row may be a backend route dictionary. State this limitation in the report.
+- Canvas-save validation does not replace intent ownership validation. A page may render a foreign positive ID, but delivery still fails unless that ID exists in the exact IVR `/ivrIntent/findList/{ivrId}` response.
 
 API readback alone is not enough for graph-affecting writes because the page may rebuild routes or collection fields from frontend canvas data.
 
@@ -340,6 +368,7 @@ Core properties:
 - `code=7`: token invalid/expired. Ask for a fresh token.
 - `illegal argument` on `/ivr/findPage`: use nested `query` and `page`.
 - `话术场景信息异常`: graph structure invalid, frontend/backend copies diverged, or prompt too long.
+- Runtime stops after a user reply, or IVR copy returns a generic/unknown system error while nodes and TTS still exist: inspect all positive numeric intent references against `/ivrIntent/findList/{ivrId}`. A foreign ID can fail before large-model 2.0 and can also break copy ID remapping.
 - Mojibake/question marks in Chinese fields: do not embed Chinese literals in Windows PowerShell 5 write requests. Use Python `requests` with UTF-8 files and `ensure_ascii=False`, or another UTF-8-safe client. If mojibake already created a bad test IVR, create a clean IVR and delete the bad one after verifying the clean version.
 - Page redirects to `/login`: browser cookie is missing/expired, but API may still work if Header token is valid.
 

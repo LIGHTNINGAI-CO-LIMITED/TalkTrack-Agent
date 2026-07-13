@@ -24,6 +24,7 @@ BACKENDS = {
 RAW_PROMPT_CHAR_LIMIT = 14500
 DEFAULT_SMART_AGENT_MODEL_ID = 55
 DEFAULT_SMART_AGENT_MODEL_NAME = "闪电26BMoE-fast"
+RESERVED_SYSTEM_INTENT_IDS = frozenset({"-1", "-2"})
 
 
 def extract_access_token(value: str) -> str:
@@ -240,6 +241,134 @@ def validate_frontend_intent_lists(scene_front, phase: str):
         raise RuntimeError("frontend intentList save-safety invalid: " + "; ".join(issues[:12]))
 
 
+def positive_numeric_intent_id(value):
+    text = str(value or "").strip()
+    return text if re.fullmatch(r"\d+", text) and int(text) > 0 else None
+
+
+def read_ivr_intent_catalog(client: Client, ivr_id: int):
+    response = client.get(f"/ivrIntent/findList/{ivr_id}")
+    Client.assert_ok(response, f"read IVR {ivr_id} intent catalog")
+    catalog = {
+        str(item.get("id")): str(item.get("name") or "")
+        for item in response.get("data") or []
+        if item.get("id") is not None and positive_numeric_intent_id(item.get("id"))
+    }
+    return catalog
+
+
+def intent_ownership_issues(scene_list, scene_front, intent_catalog, phase: str):
+    allowed = set(intent_catalog)
+    issues = []
+
+    def check_value(value, path):
+        intent_id = positive_numeric_intent_id(value)
+        if intent_id and intent_id not in allowed:
+            issues.append(f"{path} references foreign intent id {intent_id}")
+
+    def check_backend_node(node, path):
+        for index, row in enumerate(node.get("intentList") or []):
+            if not isinstance(row, dict) or "value" in row:
+                continue
+            for key in row:
+                check_value(key, f"{path}.intentList[{index}]")
+        for index, value in enumerate(node.get("interruptedIntentList") or []):
+            check_value(value, f"{path}.interruptedIntentList[{index}]")
+
+    def check_frontend_container(container, path):
+        for index, row in enumerate(container.get("intentList") or []):
+            if isinstance(row, dict):
+                check_value(row.get("value"), f"{path}.intentList[{index}].value")
+        for index, value in enumerate(container.get("interruptedIntentList") or []):
+            check_value(value, f"{path}.interruptedIntentList[{index}]")
+
+    for scene_index, scene in enumerate(scene_list or []):
+        for node_index, node in enumerate(scene.get("nodeList") or []):
+            node_name = node.get("name") or node.get("id") or node_index
+            check_backend_node(node, f"{phase}.sceneList[{scene_index}].node[{node_name}]")
+
+    for scene_index, scene in enumerate(scene_front or []):
+        for node_index, node in enumerate(scene.get("nodeList") or []):
+            node_name = node.get("name") or node.get("id") or node_index
+            check_frontend_container(node, f"{phase}.sceneListFrontend[{scene_index}].node[{node_name}]")
+        for cell in (scene.get("graph") or {}).get("cells") or []:
+            custom = (cell.get("data") or {}).get("customData") or {}
+            if not isinstance(custom, dict):
+                continue
+            cell_name = custom.get("name") or cell.get("id") or "unknown"
+            check_frontend_container(custom, f"{phase}.graphCell[{cell_name}].customData")
+    return issues
+
+
+def validate_intent_ownership(scene_list, scene_front, intent_catalog, phase: str):
+    issues = intent_ownership_issues(scene_list, scene_front, intent_catalog, phase)
+    if issues:
+        raise RuntimeError("current-IVR intent ownership invalid: " + "; ".join(issues[:12]))
+
+
+def remap_cloned_intent_references(scene_list, scene_front, source_catalog, target_catalog):
+    target_ids_by_name = {}
+    for target_id, name in target_catalog.items():
+        target_ids_by_name.setdefault(name, []).append(target_id)
+
+    mapping = {}
+    for source_id, name in source_catalog.items():
+        matches = target_ids_by_name.get(name) or []
+        if len(matches) == 1:
+            mapping[source_id] = matches[0]
+
+    def remap_value(value):
+        text = str(value or "")
+        if text in source_catalog and text not in mapping:
+            name = source_catalog.get(text) or "<unnamed>"
+            raise RuntimeError(
+                f"cannot remap source intent id {text} ({name}) to one unique target intent with the same name"
+            )
+        return mapping.get(text, value)
+
+    def remap_backend_node(node):
+        rows = []
+        for row in node.get("intentList") or []:
+            if not isinstance(row, dict) or "value" in row:
+                rows.append(row)
+                continue
+            rows.append({str(remap_value(key)): target for key, target in row.items()})
+        if "intentList" in node:
+            node["intentList"] = rows
+        if "interruptedIntentList" in node:
+            node["interruptedIntentList"] = [remap_value(value) for value in node.get("interruptedIntentList") or []]
+
+    def remap_frontend_container(container):
+        for row in container.get("intentList") or []:
+            if isinstance(row, dict) and row.get("value") is not None:
+                row["value"] = str(remap_value(row.get("value")))
+        if "interruptedIntentList" in container:
+            container["interruptedIntentList"] = [remap_value(value) for value in container.get("interruptedIntentList") or []]
+
+    for scene in scene_list or []:
+        for node in scene.get("nodeList") or []:
+            remap_backend_node(node)
+
+    for scene in scene_front or []:
+        for node in scene.get("nodeList") or []:
+            remap_frontend_container(node)
+        for cell in (scene.get("graph") or {}).get("cells") or []:
+            data = cell.get("data") or {}
+            custom = data.get("customData") or {}
+            if isinstance(custom, dict):
+                remap_frontend_container(custom)
+            for row in data.get("ports") or [] if isinstance(data.get("ports"), list) else []:
+                if isinstance(row, dict) and row.get("value") is not None:
+                    row["value"] = str(remap_value(row.get("value")))
+            for item in (cell.get("ports") or {}).get("items") or []:
+                if isinstance(item, dict) and item.get("id") is not None:
+                    item["id"] = str(remap_value(item.get("id")))
+            source = cell.get("source") or {}
+            if isinstance(source, dict) and source.get("port") is not None:
+                source["port"] = str(remap_value(source.get("port")))
+    return mapping
+
+
 def model_display_name(model: dict) -> str:
     return (
         model.get("modelName")
@@ -299,8 +428,9 @@ def apply_prompt(scene_list, scene_front, prompt: str, scene_name: str, node_nam
     update_smart_cell(smart_cell, node_name, prompt, backend_smart.get("text") or "")
 
 
-def write_scene(client: Client, ivr_id: int, scene_list, scene_front):
+def write_scene(client: Client, ivr_id: int, scene_list, scene_front, intent_catalog):
     validate_frontend_intent_lists(scene_front, "pre_write")
+    validate_intent_ownership(scene_list, scene_front, intent_catalog, "pre_write")
     return client.post(
         "/ivr/updateSceneList",
         {
@@ -411,6 +541,8 @@ def main():
 
     template = client.get(f"/ivr/findSceneList/{args.template_ivr_id}")
     Client.assert_ok(template, "read template scene")
+    source_intent_catalog = read_ivr_intent_catalog(client, args.template_ivr_id)
+    target_intent_catalog = read_ivr_intent_catalog(client, new_ivr_id)
 
     backup_dir = Path.cwd() / "管理后台CLI" / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
@@ -419,19 +551,37 @@ def main():
 
     template_scene_list = parse_json_maybe(template["data"]["sceneList"])
     template_scene_front = parse_json_maybe(template["data"]["sceneListFrontend"])
+    validate_intent_ownership(
+        template_scene_list,
+        template_scene_front,
+        source_intent_catalog,
+        "source_template",
+    )
     scene_list = copy.deepcopy(template_scene_list)
     scene_front = copy.deepcopy(template_scene_front)
+    intent_id_mapping = remap_cloned_intent_references(
+        scene_list,
+        scene_front,
+        source_intent_catalog,
+        target_intent_catalog,
+    )
     apply_prompt(scene_list, scene_front, prompt, scene_name, node_name)
 
-    update = write_scene(client, new_ivr_id, scene_list, scene_front)
+    update = write_scene(client, new_ivr_id, scene_list, scene_front, target_intent_catalog)
     if str(update.get("code")) != "0" and prompt_strategy == "raw":
         scene_list = copy.deepcopy(template_scene_list)
         scene_front = copy.deepcopy(template_scene_front)
+        intent_id_mapping = remap_cloned_intent_references(
+            scene_list,
+            scene_front,
+            source_intent_catalog,
+            target_intent_catalog,
+        )
         prompt = compacted_prompt
         prompt_strategy = "compact_after_raw_write_failure"
         prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
         apply_prompt(scene_list, scene_front, prompt, scene_name, node_name)
-        update = write_scene(client, new_ivr_id, scene_list, scene_front)
+        update = write_scene(client, new_ivr_id, scene_list, scene_front, target_intent_catalog)
     Client.assert_ok(update, "write scene list")
 
     readback = client.get(f"/ivr/findSceneList/{new_ivr_id}")
@@ -442,6 +592,8 @@ def main():
     rb_scene_list = parse_json_maybe(readback["data"]["sceneList"])
     rb_front = parse_json_maybe(readback["data"]["sceneListFrontend"])
     validate_frontend_intent_lists(rb_front, "readback")
+    target_intent_catalog = read_ivr_intent_catalog(client, new_ivr_id)
+    validate_intent_ownership(rb_scene_list, rb_front, target_intent_catalog, "readback")
     rb_scene = rb_scene_list[0]
     rb_front_scene = rb_front[0]
     rb_backend = first_smart_node(rb_scene["nodeList"])
@@ -485,6 +637,9 @@ def main():
         "modelIds": model_ids,
         "modelIdMatches": True,
         "frontendIntentListSaveSafe": True,
+        "intentOwnershipSafe": True,
+        "targetIntentCount": len(target_intent_catalog),
+        "remappedIntentCount": len(intent_id_mapping),
         "backendPromptMatches": backend_prompt == prompt,
         "frontendPromptMatches": frontend_prompt == prompt,
         "graphPromptMatches": graph_prompt == prompt,
