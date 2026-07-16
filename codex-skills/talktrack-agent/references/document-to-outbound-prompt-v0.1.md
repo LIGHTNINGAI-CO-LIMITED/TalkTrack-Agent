@@ -111,7 +111,7 @@ The generated prompt should include:
 - Flow: opening, probing, explanation, objection handling, next step, closing.
 - Safety / compliance: privacy handling, forbidden claims, escalation rules.
 - Knowledge boundaries: what to say when the answer is unknown.
-- Intent output rules when needed.
+- Intent trigger semantics and terminal ownership when needed; platform output formatting is configured separately.
 - Hangup / terminal handling when needed.
 - Smart information collection plan when structured dialogue fields are required.
 
@@ -169,7 +169,8 @@ Before calling the prompt package ready:
 - Are unsupported assumptions listed separately?
 - Is the call goal explicit?
 - Does the prompt tell the Agent what to do when the user interrupts, refuses, asks for details, or wants a human?
-- If intent JSON is required, does it follow `intent-usage-rules.md`?
+- If intent routing is required, do trigger semantics follow `intent-usage-rules.md`, with jump labels coming from the current node's dynamic intent pool?
+- For domestic smart Agents, is the business prompt free of manual output-format sections and `{Agentintentlist}`, with serialization delegated to `llmNodeOutputFormatConstraintPrompt`?
 - Does the prompt avoid treating `兜底` as an output intent? It may describe system fallback behavior, but it must not include `{"intent":"兜底"}` or "无法判断时输出兜底".
 - If information collection is required, does it use standard `{collectParam}` once unless custom inline `param` JSON is explicitly needed?
 - Are dialogue fields precise, evidence-based, and privacy-minimized?

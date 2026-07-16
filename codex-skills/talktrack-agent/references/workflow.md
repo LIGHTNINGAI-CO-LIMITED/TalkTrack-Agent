@@ -87,6 +87,7 @@ Start every run by naming the primary task mode. This prevents smart-Agent creat
 | `prompt-package-review` | Review a generated prompt package for grounding, privacy, intent rules, length, and import readiness | No |
 | `smart-agent-create` | New smart Agent IVR creation from approved source material or a known-good template | Yes, only after explicit user authorization |
 | `prompt-import` | Importing or replacing a smart-node Markdown prompt | Yes, only after explicit user authorization |
+| `output-format-constraint-migrate` | Enabling the domestic platform constraint and safely removing bounded legacy format blocks | Yes, only after explicit user authorization |
 | `smart-info-collection-design` | Designing 智能信息采集 fields, field descriptions, and `{collectParam}` placement | No by default |
 | `smart-info-collection-check` | Checking existing smart information collection prompt/config safety | Read-only by default |
 | `readonly-audit` | Readback-only inspection of an existing IVR or smart node | No |
@@ -252,6 +253,18 @@ For copy/template flows:
 4. Apply the mapping consistently to backend routes, frontend option values, graph custom data, and interrupted-intent rows.
 5. If the source ID has no source record, or the target has zero/multiple exact-name matches, stop. Do not guess, reuse the source ID, delete the branch, or call `updateSceneList`.
 
+## Platform Output-Format Constraint
+
+For domestic smart Agent nodes, read `output-format-constraint-v0.1.md` and keep these fields synchronized across backend node, frontend node, and graph `customData`:
+
+- `llmNodeOutputFormatConstraintEnabled=1` by default
+- `llmNodeOutputFormatConstraintPrompt=<verified canonical prompt>`
+- `{Agentintentlist}` appears exactly once in the canonical prompt and nowhere in the business prompt
+
+The Debug UI only controls editor visibility. Direct API workflows must still write and read back both fields.
+
+For existing domestic nodes, remove only safely bounded legacy format blocks. If residual format rules are mixed with business text, stop before `updateSceneList`. For overseas nodes, preserve existing fields until the overseas behavior is separately verified.
+
 ## Intent Usage Rules
 
 When the prompt contains `{"intent":"..."}`, intent tables, terminal intents, or hangup intents, read `intent-usage-rules.md` before writing or validating the prompt.
@@ -259,11 +272,12 @@ When the prompt contains `{"intent":"..."}`, intent tables, terminal intents, or
 Enforce these checks against both the prompt and IVR graph:
 
 - `intent` means the current AI reply's matched flow node or hangup node, not the customer's overall profile or whole-call final evaluation.
-- Non-hangup nodes must output the current node ID, for example `stage_1_opening` or `objection_reject`.
+- When a jump condition is met, intent must use the exact current-node label dynamically supplied through `{Agentintentlist}`.
+- When no jump condition is met, the Agent may remain in the current node with empty intent or a concrete stay intent such as `继续沟通`.
 - Hangup nodes must output only one of: `高意向成交类`, `待跟进留存类`, `无意向终止类`, `异常场景应急类`.
 - `兜底` is not an intent. A fallback/default port may exist in the graph, but prompts, examples, candidate labels, and model output must not use `{"intent":"兜底"}` to jump.
 - Do not let earlier customer state lock later intent. The final output follows the current SOP branch and current node mapping.
-- Output format must be `回复内容{"intent":"当前意图"}` with JSON directly at the end and no extra explanation.
+- The platform output-format constraint owns JSON serialization, tail cleanliness, and merging of `intent`, `param`, and `waitAsk`; the business prompt must not duplicate those rules.
 - If the smart Agent itself is the final speaker, hangup replies must include `再见` and finish the closing sentence before the hangup action.
 - If the smart Agent's terminal intent maps to a downstream hangup / end node that will speak again, the Agent must only say a short acknowledgement plus `{"intent":"..."}`. The downstream node owns the formal closing, goodbye, handoff promise, and business-detail recap.
 
@@ -280,7 +294,7 @@ For IVR graph validation, compare the prompt's terminal intent labels with:
 
 Read Markdown prompts with UTF-8.
 
-For any intent-enabled prompt, load `intent-usage-rules.md` before import and preserve those rules exactly. If compaction is needed, do not rewrite the intent semantics, the four hangup labels, the current-node rule, or the required output format.
+For any intent-enabled prompt, load `intent-usage-rules.md` and `output-format-constraint-v0.1.md` before import. Preserve business intent semantics and terminal ownership, but remove safely bounded prompt-owned output-format blocks when enabling the domestic platform constraint.
 
 Do not compact by default. Count the raw prompt characters first:
 
@@ -313,12 +327,14 @@ Check:
 - Smart node has `type=4`.
 - Node is start node if intended.
 - `llmNodeModelConfig.id=55` in backend node, frontend node, and graph `customData`; the expected model is `闪电26BMoE-fast`.
-- Prompt length/hash matches the exact prompt variant written: raw if under 14,500 characters, compacted only when required.
+- Prompt length/hash matches the exact migrated business-prompt variant written: raw/migrated if under 14,500 characters, compacted only when required.
 - Prompt matches in backend node, frontend node, and graph custom data.
+- Domestic output-format enabled state and constraint prompt match across backend node, frontend node, and graph `customData`; the enabled constraint has one `{Agentintentlist}`. Existing intentional custom text may remain if it preserves all required invariants.
+- The business prompt has no duplicate platform-format section and no `{Agentintentlist}`.
 - For intent-enabled prompts, the imported prompt still follows `intent-usage-rules.md`.
 - The prompt does not tell the Agent to output `{"intent":"兜底"}` and does not list `兜底` as a candidate business intent.
 - The prompt's four hangup labels match IVR smart-node ports and map to `type=2`, `nextType=2`, `actionName=挂机` terminal nodes.
-- Non-hangup intent examples in the prompt are node IDs rather than terminal labels.
+- Jump-intent examples use current-node port labels; non-jump examples may use empty or concrete stay intent.
 - Terminal intent examples do not duplicate downstream terminal-node closing text. If downstream nodes speak the closing, smart-Agent terminal examples are short acknowledgements only.
 - If 智能信息采集 is enabled, `{collectParam}` appears exactly once in standard mode, or inline `param` JSON uses exact configured field names in custom mode.
 - If 智能信息采集 is enabled, every field referenced by `llmNodeCollectParamList` exists in `变量管理 -> 对话字段`, and every `llmNodeCollectParamList[].id` is the real positive ID returned by the variable list.
@@ -336,7 +352,7 @@ Required checks:
 
 - Open the resolved graph URL: domestic `https://ai.sd6g.com:1904/script-graph?ivrId=<ivrId>` or overseas `https://ai.tbot360.com/script-graph?ivrId=<ivrId>`.
 - Refresh any already-open old tab before saving; stale page memory can overwrite repaired canvas data.
-- Confirm the smart Agent drawer opens and the intended prompt, model, intent ports, and information-collection fields are visible.
+- Confirm the smart Agent drawer opens and the intended prompt, model, intent ports, and information-collection fields are visible. If Debug fields are hidden, verify output-format constraint state through API readback instead of treating the hidden editor as a missing field.
 - Confirm the page can save/update successfully from the canvas view.
 - If a real browser save click is unavailable, simulate the page-save shape as far as possible: frontend `intentList` rows must have `value`, `label`, and `digitSequence`; graph ports and mapped intents must still agree; no frontend row may be a backend route dictionary. State this limitation in the report.
 - Canvas-save validation does not replace intent ownership validation. A page may render a foreign positive ID, but delivery still fails unless that ID exists in the exact IVR `/ivrIntent/findList/{ivrId}` response.

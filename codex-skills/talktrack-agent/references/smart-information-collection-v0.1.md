@@ -88,7 +88,7 @@ Important:
 
 - Insert `{collectParam}` only once, no matter how many fields are configured.
 - The model reads all field definitions from the configured table.
-- The main smart-Agent output format can stay as `回复内容{"intent":"当前意图"}`.
+- Do not append a manual output-format contract to the business prompt. On domestic smart Agents, the enabled platform output constraint owns the final single-JSON shape and merges `intent`, `param`, and `waitAsk` when needed together.
 
 Acceptance gate:
 
@@ -133,7 +133,7 @@ Default values are allowed only when the business prompt explicitly defines them
 Output structure:
 
 - Standard mode remains preferred: configure `llmNodeCollectParamList`, insert `{collectParam}` once, and let the platform populate the dialogue-field extraction list.
-- If the prompt must control inline values, use natural reply plus one JSON object in the same turn. Do not output Markdown, labels, tables, analysis, or multiple alternatives.
+- If the prompt must control inline values, define only the field semantics and examples in the business prompt. The platform output constraint enforces natural reply plus one JSON object and merges all required fields.
 - Terminal examples:
 
 ```text
@@ -160,7 +160,7 @@ Hard acceptance checks:
 
 Use only when the user explicitly wants full prompt control or the backend workflow requires the Agent to output collected fields inline.
 
-Output shape:
+Business example, not a replacement output-format contract:
 
 ```text
 回复内容{"intent":"当前意图","param":[{"name":"字段名","value":"字段值"}]}
@@ -172,7 +172,7 @@ Rules:
 - `value` must come from user wording or clear conversation evidence.
 - Use empty string, `未提及`, or a user-approved null convention when no evidence exists.
 - Do not invent missing values.
-- Do not add explanations outside the JSON.
+- Do not add another prompt section that restates JSON placement, JSON-tail cleanliness, or candidate intent serialization; the platform constraint owns those rules.
 
 If a terminal intent maps to a downstream speaking end node, terminal-closing ownership still applies:
 

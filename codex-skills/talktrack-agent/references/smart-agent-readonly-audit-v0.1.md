@@ -104,7 +104,8 @@ When a source prompt is provided:
 
 - Compare character count and SHA-256 hash after UTF-8 read.
 - Confirm backend node, frontend node, and graph custom data contain the same prompt variant.
-- Confirm required output format sections remain present, especially intent JSON rules.
+- For domestic nodes, confirm output-format rules are platform-owned: `llmNodeOutputFormatConstraintEnabled=1`, constraint text matches across all three surfaces, and `{Agentintentlist}` appears exactly once in the constraint rather than the business prompt. A non-empty customized constraint is allowed when it preserves the required invariants.
+- Confirm the business prompt has no duplicate platform-format section. For legacy nodes, distinguish a safely migratable bounded block from ambiguous format text mixed with business logic.
 - Confirm the prompt was not unexpectedly compacted, truncated, or mojibaked.
 
 When no source prompt is provided:
@@ -120,9 +121,9 @@ Typical deductions:
 
 ### 4. Intent / Port Governance: 20
 
-If the prompt or node uses `{"intent":"..."}`, load `intent-usage-rules.md` and check:
+If the prompt or node uses `intent`, load `intent-usage-rules.md` and `output-format-constraint-v0.1.md` and check:
 
-- Non-hangup intents use current node IDs or approved business node labels, not stale terminal labels.
+- Jump intents use current-node dynamic pool labels; non-jump turns may use empty or concrete stay intent.
 - Hangup / terminal intents use exactly the four allowed terminal labels from `intent-usage-rules.md`.
 - `兜底` is not used as a prompt-emitted intent or model candidate. It may appear only as a graph fallback/default route.
 - Smart node `llmNodeIntentList`, `llmNodeIntentMappingList`, frontend `intentList`, graph ports, and terminal nodes agree.
@@ -135,7 +136,9 @@ Typical deductions:
 
 - P0-sized: terminal / hangup semantics are broken or map to missing targets.
 - P0-sized: prompt or model config actively outputs `{"intent":"兜底"}` and routes the call by that label.
+- P0-sized: domestic platform constraint is enabled but missing its prompt, has zero/multiple `{Agentintentlist}` placeholders, or differs across backend/frontend/graph.
 - P1-sized: prompt intent labels and graph ports disagree, or smart-Agent terminal examples duplicate downstream terminal-node closing copy.
+- P1-sized: business prompt duplicates a safely identifiable platform-format block; ambiguous mixed format/business text blocks automatic migration and requires review.
 - P2-sized: label naming is confusing but mapped correctly.
 
 ### 4.5 Smart Information Collection Governance
@@ -149,7 +152,7 @@ If the smart Agent uses 智能信息采集, also check:
 - Dialogue fields have concise field descriptions.
 - Field descriptions require evidence from user wording or conversation context.
 - Custom inline `param` JSON, if used, has field names matching configured dialogue fields.
-- Information collection does not break the required intent JSON format.
+- Platform output constraint can merge `intent`, `param`, and `waitAsk` into one JSON; the business prompt does not create multiple competing result JSON structures.
 - Terminal-closing ownership still holds when terminal replies include collected params.
 - PII / sensitive fields are minimized and explicitly justified.
 

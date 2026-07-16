@@ -25,6 +25,58 @@ RAW_PROMPT_CHAR_LIMIT = 14500
 DEFAULT_SMART_AGENT_MODEL_ID = 55
 DEFAULT_SMART_AGENT_MODEL_NAME = "闪电26BMoE-fast"
 RESERVED_SYSTEM_INTENT_IDS = frozenset({"-1", "-2"})
+OUTPUT_FORMAT_INTENT_PLACEHOLDER = "{Agentintentlist}"
+DEFAULT_OUTPUT_FORMAT_CONSTRAINT_PROMPT = """<当前节点跳转意图池与触发条件开始>
+{Agentintentlist}
+<当前节点跳转意图池与触发条件结束>
+
+<意图与格式输出规范开始>
+
+1. 意图分类与核心逻辑：
+- 任何业务节点的意图均分为两类：【跳转意图】和【留守意图】。
+- 【跳转意图】：当用户明确触发跨节点流转、业务结束、转交等边界条件时，`intent` 的值必须且只能从上述 `<当前节点跳转意图池与触发条件>` 中严格提取。
+- 【留守意图】：当对话处于正常问答、信息收集、闲聊等不需要跳出当前节点的状态时，`intent` 应该输出当前语境的具体意图（例如 "继续沟通"、"沟通中"）。
+
+2. intent 字段赋值铁律：
+- 只要满足跳转意图的触发条件，必须一字不差地输出意图池中的对应词汇。
+- 在【留守意图】状态下，允许输出合理的归纳意图，但**绝对禁止**捏造并输出“占位符”、“测试”这种毫无意义的系统级占位词。
+
+3. 格式规范与尾部干净要求（最高优先级）：
+- 每次回复必须且只能是：自然语言回复内容 + 单个合法的结果 JSON。
+- **字段包容性**：该 JSON 必须包含 `intent` 字段。如果当前业务存在变量采集指令（如 `param`）或追问指令（如 `waitAsk`），**必须将所有要求的字段合并到这唯一的一个 JSON 结构内部**，绝不允许输出多个 JSON。
+- JSON 必须放置在自然语言回复内容的最后。允许自然语言与 JSON 之间存在换行。
+- **致命禁令**：该单一 JSON 的右括号 `}` 必须是整个大模型输出的**最后一个字符**。在 `}` 之后**绝对禁止**出现任何标点符号（包括句号、逗号）、换行符、空格、备注或分析过程。禁止使用代码块（如 ```json）包裹结果。
+
+4. 兜底与分析过程禁令：
+- 即使“兜底”作为一个词碰巧存在于意图池或系统设定中，也**绝对禁止**输出 `{"intent":"兜底"}`。
+- 绝对禁止在自然语言回复中输出 JSON 占位符、意图解析过程或任何调试说明。
+
+5. 正确与错误格式示例参考：
+- 正确（触发意图池中的跳转意图，允许换行）：
+[这里是连贯自然的回复内容]
+{"intent":"上述意图池中定义的某个具体意图"}
+- 正确（不触发跳转，直接留空）：
+[这里是连贯自然的回复内容]{"intent":""}
+- 正确（不触发跳转，输出具体留守意图）：
+[这里是连贯自然的回复内容]
+{"intent":"继续沟通"}
+- 错误（捏造了系统级禁止词汇，禁止）：
+[这里是连贯自然的回复内容]{"intent":"当前意图"} （错误原因：输出了绝对禁止的系统占位词）
+- 错误（JSON 尾部多出标点，致命错误）：
+[这里是连贯自然的回复内容]
+{"intent":"继续沟通"}。 （错误原因：右括号 `}` 后面多出了句号，会导致系统 JSON 解析崩溃）
+
+<意图与格式输出规范结束>"""
+FORMAT_HEADING_RE = re.compile(
+    r"(?:输出格式|格式约束|格式限制|结果格式|JSON\s*输出|JSON\s*格式)", re.I
+)
+AMBIGUOUS_FORMAT_RULE_RE = re.compile(
+    r"(?:每次回复必须且只能是|JSON\s*必须(?:放置|紧贴)|"
+    r"右括号.*必须是.*最后一个字符|"
+    r"禁止使用代码块.*(?:JSON|结果)|"
+    r"自然语言回复内容\s*\+\s*单个合法的结果\s*JSON)",
+    re.I,
+)
 
 
 def extract_access_token(value: str) -> str:
@@ -97,6 +149,79 @@ def compact_prompt(text: str) -> str:
     while "\n\n\n" in result:
         result = result.replace("\n\n\n", "\n\n")
     return result.strip()
+
+
+def normalize_prompt_spacing(text: str) -> str:
+    result = "\n".join(
+        line.rstrip()
+        for line in (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    )
+    while "\n\n\n" in result:
+        result = result.replace("\n\n\n", "\n\n")
+    return result.strip()
+
+
+def has_duplicate_output_format_rules(prompt: str) -> bool:
+    text = prompt or ""
+    return (
+        OUTPUT_FORMAT_INTENT_PLACEHOLDER in text
+        or "<意图与格式输出规范开始>" in text
+        or "<意图与格式输出规范结束>" in text
+        or bool(FORMAT_HEADING_RE.search(text))
+        or bool(AMBIGUOUS_FORMAT_RULE_RE.search(text))
+    )
+
+
+def _remove_markdown_format_sections(text: str) -> tuple[str, int]:
+    lines = text.splitlines()
+    kept = []
+    removed = 0
+    index = 0
+    while index < len(lines):
+        match = re.match(r"^(#{1,6})\s+(.+?)\s*$", lines[index])
+        if not match or not FORMAT_HEADING_RE.search(match.group(2)):
+            kept.append(lines[index])
+            index += 1
+            continue
+
+        removed += 1
+        level = len(match.group(1))
+        index += 1
+        while index < len(lines):
+            next_heading = re.match(r"^(#{1,6})\s+(.+?)\s*$", lines[index])
+            if next_heading and len(next_heading.group(1)) <= level:
+                break
+            index += 1
+
+    return "\n".join(kept), removed
+
+
+def migrate_legacy_output_format_rules(prompt: str) -> tuple[str, int]:
+    text = (prompt or "").replace("\r\n", "\n").replace("\r", "\n")
+    removed = 0
+
+    if DEFAULT_OUTPUT_FORMAT_CONSTRAINT_PROMPT in text:
+        occurrences = text.count(DEFAULT_OUTPUT_FORMAT_CONSTRAINT_PROMPT)
+        text = text.replace(DEFAULT_OUTPUT_FORMAT_CONSTRAINT_PROMPT, "")
+        removed += occurrences
+
+    marker_pattern = re.compile(
+        r"\n*<意图与格式输出规范开始>.*?<意图与格式输出规范结束>\n*",
+        re.S,
+    )
+    text, marker_count = marker_pattern.subn("\n", text)
+    removed += marker_count
+
+    text, heading_count = _remove_markdown_format_sections(text)
+    removed += heading_count
+    text = normalize_prompt_spacing(text)
+
+    if has_duplicate_output_format_rules(text):
+        raise RuntimeError(
+            "legacy output-format rules are mixed with business prompt content; "
+            "manual review is required before updateSceneList"
+        )
+    return text, removed
 
 
 class Client:
@@ -389,16 +514,30 @@ def find_default_model_name(model_response) -> str:
     )
 
 
-def update_smart_node(node, node_name: str, prompt: str):
+def apply_output_format_constraint(container: dict, mode: str):
+    if mode == "preserve":
+        return
+    container["llmNodeOutputFormatConstraintEnabled"] = 0 if mode == "disable" else 1
+    container["llmNodeOutputFormatConstraintPrompt"] = DEFAULT_OUTPUT_FORMAT_CONSTRAINT_PROMPT
+
+
+def update_smart_node(node, node_name: str, prompt: str, output_constraint_mode: str):
     node["name"] = node_name
     config = node.setdefault("llmNodeModelConfig", {})
     config["id"] = DEFAULT_SMART_AGENT_MODEL_ID
     config["prompt"] = prompt
     config["enableThinking"] = 0
     config["enable_thinking"] = 0
+    apply_output_format_constraint(node, output_constraint_mode)
 
 
-def update_smart_cell(cell, node_name: str, prompt: str, description: str):
+def update_smart_cell(
+    cell,
+    node_name: str,
+    prompt: str,
+    description: str,
+    output_constraint_mode: str,
+):
     data = cell.setdefault("data", {})
     data["label"] = node_name
     data["title"] = node_name
@@ -411,9 +550,77 @@ def update_smart_cell(cell, node_name: str, prompt: str, description: str):
     config["prompt"] = prompt
     config["enableThinking"] = 0
     config["enable_thinking"] = 0
+    apply_output_format_constraint(custom, output_constraint_mode)
 
 
-def apply_prompt(scene_list, scene_front, prompt: str, scene_name: str, node_name: str):
+def output_constraint_surfaces(scene_list, scene_front):
+    scene = scene_list[0]
+    front_scene = scene_front[0]
+    return {
+        "backend": first_smart_node(scene["nodeList"]),
+        "frontend": first_smart_node(front_scene["nodeList"]),
+        "graph": first_smart_graph_cell(front_scene["graph"]["cells"])["data"]["customData"],
+    }
+
+
+def validate_output_format_constraint(scene_list, scene_front, mode: str) -> dict:
+    surfaces = output_constraint_surfaces(scene_list, scene_front)
+    enabled = {
+        name: normalize_int(container.get("llmNodeOutputFormatConstraintEnabled")) or 0
+        for name, container in surfaces.items()
+    }
+    prompts = {
+        name: container.get("llmNodeOutputFormatConstraintPrompt") or ""
+        for name, container in surfaces.items()
+    }
+    business_prompts = {
+        name: (container.get("llmNodeModelConfig") or {}).get("prompt") or ""
+        for name, container in surfaces.items()
+    }
+
+    if len(set(enabled.values())) != 1:
+        raise RuntimeError(f"output-format enabled state differs across surfaces: {enabled}")
+    if len(set(prompts.values())) != 1:
+        raise RuntimeError("output-format constraint prompt differs across backend/frontend/graph")
+    if len(set(business_prompts.values())) != 1:
+        raise RuntimeError("business prompt differs across backend/frontend/graph")
+
+    actual_enabled = next(iter(enabled.values()))
+    if mode == "enable" and actual_enabled != 1:
+        raise RuntimeError(f"domestic output-format constraint must be enabled, got={enabled}")
+    if mode == "disable" and actual_enabled != 0:
+        raise RuntimeError(f"output-format constraint must be disabled, got={enabled}")
+
+    constraint_prompt = next(iter(prompts.values()))
+    placeholder_count = constraint_prompt.count(OUTPUT_FORMAT_INTENT_PLACEHOLDER)
+    if actual_enabled == 1 and placeholder_count != 1:
+        raise RuntimeError(
+            "enabled output-format constraint must contain {Agentintentlist} exactly once"
+        )
+    if mode in {"enable", "disable"} and constraint_prompt != DEFAULT_OUTPUT_FORMAT_CONSTRAINT_PROMPT:
+        raise RuntimeError("output-format constraint prompt does not match the verified domestic default")
+
+    business_prompt = next(iter(business_prompts.values()))
+    duplicate = has_duplicate_output_format_rules(business_prompt)
+    if mode == "enable" and duplicate:
+        raise RuntimeError("business prompt still contains duplicate platform output-format rules")
+
+    return {
+        "enabled": actual_enabled,
+        "promptMatches": len(set(prompts.values())) == 1,
+        "placeholderCount": placeholder_count,
+        "businessPromptHasDuplicateFormatRules": duplicate,
+    }
+
+
+def apply_prompt(
+    scene_list,
+    scene_front,
+    prompt: str,
+    scene_name: str,
+    node_name: str,
+    output_constraint_mode: str,
+):
     scene = scene_list[0]
     front_scene = scene_front[0]
     scene["name"] = scene_name
@@ -423,14 +630,29 @@ def apply_prompt(scene_list, scene_front, prompt: str, scene_name: str, node_nam
     frontend_smart = first_smart_node(front_scene["nodeList"])
     smart_cell = first_smart_graph_cell(front_scene["graph"]["cells"])
 
-    update_smart_node(backend_smart, node_name, prompt)
-    update_smart_node(frontend_smart, node_name, prompt)
-    update_smart_cell(smart_cell, node_name, prompt, backend_smart.get("text") or "")
+    update_smart_node(backend_smart, node_name, prompt, output_constraint_mode)
+    update_smart_node(frontend_smart, node_name, prompt, output_constraint_mode)
+    update_smart_cell(
+        smart_cell,
+        node_name,
+        prompt,
+        backend_smart.get("text") or "",
+        output_constraint_mode,
+    )
+    validate_output_format_constraint(scene_list, scene_front, output_constraint_mode)
 
 
-def write_scene(client: Client, ivr_id: int, scene_list, scene_front, intent_catalog):
+def write_scene(
+    client: Client,
+    ivr_id: int,
+    scene_list,
+    scene_front,
+    intent_catalog,
+    output_constraint_mode: str,
+):
     validate_frontend_intent_lists(scene_front, "pre_write")
     validate_intent_ownership(scene_list, scene_front, intent_catalog, "pre_write")
+    validate_output_format_constraint(scene_list, scene_front, output_constraint_mode)
     return client.post(
         "/ivr/updateSceneList",
         {
@@ -499,6 +721,11 @@ def main():
     parser.add_argument("--prompt-path", required=True)
     parser.add_argument("--template-ivr-id", type=int, default=3449)
     parser.add_argument("--cleanup-ivr-id", type=int)
+    parser.add_argument(
+        "--disable-output-format-constraint",
+        action="store_true",
+        help="Explicitly disable the platform output-format constraint. The prompt text is retained for re-enable.",
+    )
     args = parser.parse_args()
 
     backend = resolve_backend(args.token, args.backend_region, args.backend_url)
@@ -515,10 +742,21 @@ def main():
     Client.assert_ok(model_response, "read models")
     default_model_name = find_default_model_name(model_response)
 
+    output_constraint_mode = (
+        "disable"
+        if args.disable_output_format_constraint
+        else "enable"
+        if backend["region"] == "domestic"
+        else "preserve"
+    )
     raw_prompt = prompt_path.read_text(encoding="utf-8")
-    compacted_prompt = compact_prompt(raw_prompt)
-    prompt = raw_prompt if len(raw_prompt) < RAW_PROMPT_CHAR_LIMIT else compacted_prompt
-    prompt_strategy = "raw" if prompt == raw_prompt else "compact"
+    migrated_prompt = raw_prompt
+    legacy_format_block_removed = 0
+    if output_constraint_mode == "enable":
+        migrated_prompt, legacy_format_block_removed = migrate_legacy_output_format_rules(raw_prompt)
+    compacted_prompt = compact_prompt(migrated_prompt)
+    prompt = migrated_prompt if len(migrated_prompt) < RAW_PROMPT_CHAR_LIMIT else compacted_prompt
+    prompt_strategy = "raw" if prompt == raw_prompt else "migrated" if prompt == migrated_prompt else "compact"
     prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -565,10 +803,24 @@ def main():
         source_intent_catalog,
         target_intent_catalog,
     )
-    apply_prompt(scene_list, scene_front, prompt, scene_name, node_name)
+    apply_prompt(
+        scene_list,
+        scene_front,
+        prompt,
+        scene_name,
+        node_name,
+        output_constraint_mode,
+    )
 
-    update = write_scene(client, new_ivr_id, scene_list, scene_front, target_intent_catalog)
-    if str(update.get("code")) != "0" and prompt_strategy == "raw":
+    update = write_scene(
+        client,
+        new_ivr_id,
+        scene_list,
+        scene_front,
+        target_intent_catalog,
+        output_constraint_mode,
+    )
+    if str(update.get("code")) != "0" and prompt == migrated_prompt:
         scene_list = copy.deepcopy(template_scene_list)
         scene_front = copy.deepcopy(template_scene_front)
         intent_id_mapping = remap_cloned_intent_references(
@@ -578,10 +830,24 @@ def main():
             target_intent_catalog,
         )
         prompt = compacted_prompt
-        prompt_strategy = "compact_after_raw_write_failure"
+        prompt_strategy = "compact_after_prompt_write_failure"
         prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-        apply_prompt(scene_list, scene_front, prompt, scene_name, node_name)
-        update = write_scene(client, new_ivr_id, scene_list, scene_front, target_intent_catalog)
+        apply_prompt(
+            scene_list,
+            scene_front,
+            prompt,
+            scene_name,
+            node_name,
+            output_constraint_mode,
+        )
+        update = write_scene(
+            client,
+            new_ivr_id,
+            scene_list,
+            scene_front,
+            target_intent_catalog,
+            output_constraint_mode,
+        )
     Client.assert_ok(update, "write scene list")
 
     readback = client.get(f"/ivr/findSceneList/{new_ivr_id}")
@@ -594,6 +860,11 @@ def main():
     validate_frontend_intent_lists(rb_front, "readback")
     target_intent_catalog = read_ivr_intent_catalog(client, new_ivr_id)
     validate_intent_ownership(rb_scene_list, rb_front, target_intent_catalog, "readback")
+    output_constraint_readback = validate_output_format_constraint(
+        rb_scene_list,
+        rb_front,
+        output_constraint_mode,
+    )
     rb_scene = rb_scene_list[0]
     rb_front_scene = rb_front[0]
     rb_backend = first_smart_node(rb_scene["nodeList"])
@@ -627,6 +898,7 @@ def main():
         "sceneName": rb_scene.get("name"),
         "smartNodeName": rb_backend.get("name"),
         "promptRawChars": len(raw_prompt),
+        "promptMigratedChars": len(migrated_prompt),
         "promptWrittenChars": len(prompt),
         "promptCompactedChars": len(compacted_prompt),
         "promptStrategy": prompt_strategy,
@@ -636,6 +908,14 @@ def main():
         "modelNameFromCatalog": default_model_name,
         "modelIds": model_ids,
         "modelIdMatches": True,
+        "outputFormatConstraintMode": output_constraint_mode,
+        "outputFormatConstraintEnabled": output_constraint_readback["enabled"],
+        "outputFormatConstraintPromptMatches": output_constraint_readback["promptMatches"],
+        "agentIntentPlaceholderCount": output_constraint_readback["placeholderCount"],
+        "legacyFormatBlockRemoved": legacy_format_block_removed,
+        "businessPromptHasDuplicateFormatRules": output_constraint_readback[
+            "businessPromptHasDuplicateFormatRules"
+        ],
         "frontendIntentListSaveSafe": True,
         "intentOwnershipSafe": True,
         "targetIntentCount": len(target_intent_catalog),
